@@ -36,6 +36,12 @@ jobs:
           set -euo pipefail
           so=build-arm64/connie.so
 
+          if [ ! -f "$so" ]; then
+            echo "ERROR: $so not found" >&2
+            find build-arm64 -name 'connie.so' -o -name '*.so' 2>/dev/null >&2
+            exit 1
+          fi
+
           if ldd "$so" | grep -q 'libstdc++'; then
             echo "ERROR: $so still dynamically links libstdc++:" >&2
             ldd "$so" >&2

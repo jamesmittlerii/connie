@@ -29,6 +29,8 @@ add_library(connie-lv2 MODULE
 set_target_properties(connie-lv2 PROPERTIES
   OUTPUT_NAME "connie"
   PREFIX ""
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
 if(WIN32)
