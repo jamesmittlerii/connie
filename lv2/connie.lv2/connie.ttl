@@ -1,0 +1,62 @@
+@prefix lv2:  <http://lv2plug.in/ns/lv2core#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
+
+<https://ho-ro.net/connie/lv2>
+	a		lv2:InstrumentPlugin;
+	doap:name	"Connie";
+	doap:license	<http://www.gnu.org/licenses/gpl-2.0.html>;
+	lv2:requiredFeature <http://lv2plug.in/ns/ext/urid#map>;
+
+	lv2:port [
+		a lv2:AudioPort, lv2:OutputPort;
+		lv2:index 0;
+		lv2:symbol "output_L";
+		lv2:name "Output L";
+	],
+	[
+		a lv2:AudioPort, lv2:OutputPort;
+		lv2:index 1;
+		lv2:symbol "output_R";
+		lv2:name "Output R";
+	],
+	[
+		a lv2:InputPort, atom:AtomPort;
+		atom:supports <http://lv2plug.in/ns/ext/midi#MidiEvent>;
+		lv2:index 2;
+		lv2:symbol "midi";
+		lv2:name "MIDI in";
+	],
+	[ a lv2:ControlPort, lv2:InputPort;
+		lv2:index 3;
+		lv2:symbol "enabled";
+		lv2:name "Enabled";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 1.0;
+		lv2:designation lv2:enabled;
+		lv2:portProperty lv2:toggled; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 4;  lv2:symbol "db_16";     lv2:name "16'";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.75; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 5;  lv2:symbol "db_8";      lv2:name "8'";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 1.0; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 6;  lv2:symbol "db_4";      lv2:name "4'";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.75; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 7;  lv2:symbol "db_iv";     lv2:name "Mixture IV";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 1.0; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 8;  lv2:symbol "db_flute";  lv2:name "Flute";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 1.0; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 9;  lv2:symbol "db_reed";   lv2:name "Reed";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.5; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 10; lv2:symbol "db_sharp";  lv2:name "Sharp";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.0; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 11; lv2:symbol "db_perc";   lv2:name "Percussion";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.0; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 12; lv2:symbol "db_vibrato"; lv2:name "Vibrato";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.0; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 13; lv2:symbol "db_reverb"; lv2:name "Reverb";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.5; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 14; lv2:symbol "master";    lv2:name "Master";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.25; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 15; lv2:symbol "transpose"; lv2:name "Transpose";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.5; ],
+	[ a lv2:ControlPort, lv2:InputPort; lv2:index 16; lv2:symbol "preset";   lv2:name "Preset";
+		lv2:minimum 0.0; lv2:maximum 1.0; lv2:default 0.0; ] .

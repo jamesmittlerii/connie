@@ -13,3 +13,19 @@ connie_sse
 tags
 *-stamp
 debian/*debhelper*
+
+# Build trees and CI packages
+build/
+build-*/
+dist/
+
+# CMake (accidental in-tree configure)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+Testing/
+
+# MSVC link artifacts outside build trees
+*.exp

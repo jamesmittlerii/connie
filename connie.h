@@ -26,6 +26,7 @@
 
 typedef enum {CONNIE, HAMMOND} model_t;
 
+extern model_t connie_model;
 extern const char * connie_version;
 //extern const char * connie_name;
 

@@ -53,6 +53,7 @@
 #include "connie_ui.h"
 #include "reverb.h"
 #include "scales.h"
+#include "connie_tuning.h"
 
 const char * connie_version = "0.4.3-rc6 20100928";
 const char * connie_name = "long time gone";
@@ -68,11 +69,7 @@ const char * connie_cpu = "";
 //            <USER TUNABLE PART>           //
 //////////////////////////////////////////////
 //
-// "size of the instrument"
-#define OCTAVES 5
-#define LOWNOTE 24
-#define HIGHNOTE (LOWNOTE+12*OCTAVES)
-
+// "size of the instrument" — see connie_tuning.h
 // max "leslie" rotation freq (8 steps)
 #define VIBRATO 6.4
 //
@@ -712,7 +709,10 @@ static void tg_init( int tg_sample_rate )
     for ( int oct = 0; oct < OCT_SAMP; oct++ ) {
       // max partial < tg_sample_rate/3 for highest note in this octave
       // sr / 3 to reduce aliasing effects
-      int partials = tg_sample_rate / 2.0 / tg_midi_freq[ LOWNOTE + 12 * oct + 12 ];
+      int refnote = LOWNOTE + 12 * oct + 12;
+      if ( refnote >= MIDI_MAX )
+        refnote = MIDI_MAX - 1;
+      int partials = tg_sample_rate / 2.0 / tg_midi_freq[ refnote ];
       printf( "." );
       fflush( stdout );
       for ( int i=0; i < tg_sam_in_cy; i++ ) {

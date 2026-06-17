@@ -1,0 +1,74 @@
+name: Build LV2 Bundles
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build-linux-arm64:
+    name: Linux ARM64 (Raspberry Pi target)
+    runs-on: ubuntu-24.04-arm
+    # Match Raspberry Pi OS / Debian Bookworm glibc (2.36). Ubuntu 24.04 needs GLIBC_2.38+.
+    container: debian:bookworm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: apt-get update && apt-get install -y cmake ninja-build build-essential binutils bash zip
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-arm64 -G Ninja \
+            -DCONNIE_BUILD_VST3=OFF \
+            -DCONNIE_BUILD_LV2=ON \
+            -DCONNIE_LV2_BUNDLE_DIR="$HOME/.lv2/connie.lv2"
+
+      - name: Build
+        run: cmake --build build-arm64
+
+      - name: Verify Pi-compatible linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          so=build-arm64/connie.so
+
+          if ldd "$so" | grep -q 'libstdc++'; then
+            echo "ERROR: $so still dynamically links libstdc++:" >&2
+            ldd "$so" >&2
+            exit 1
+          fi
+          echo "OK: no dynamic libstdc++ dependency"
+
+          max_glibc=$(objdump -T "$so" | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+          target_glibc="2.36"
+          echo "Max GLIBC symbol version required: ${max_glibc:-none}"
+          if [ -n "$max_glibc" ] && [ "$(printf '%s\n' "$max_glibc" "$target_glibc" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" != "$max_glibc" ]; then
+            echo "ERROR: $so requires GLIBC > $target_glibc (too new for Raspberry Pi OS Bookworm)" >&2
+            objdump -T "$so" | grep GLIBC | sort -u >&2
+            exit 1
+          fi
+          echo "OK: GLIBC requirement is Pi-compatible (<= $target_glibc)"
+
+      - name: Run headless test
+        run: cmake --build build-arm64 --target test-headless
+
+      - name: Package LV2 bundle
+        run: |
+          mkdir -p dist/connie.lv2
+          cp build-arm64/connie.so dist/connie.lv2/connie.so
+          cp lv2/connie.lv2/connie.ttl dist/connie.lv2/connie.ttl
+          cp build-arm64/connie.lv2/manifest.ttl dist/connie.lv2/manifest.ttl
+          (cd dist && zip -r connie-lv2-linux-arm64.zip connie.lv2)
+          (cd dist && sha256sum connie-lv2-linux-arm64.zip > sha256sums.txt)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: connie-lv2-linux-arm64
+          path: |
+            dist/connie-lv2-linux-arm64.zip
+            dist/sha256sums.txt

@@ -26,9 +26,10 @@
 
 
 #include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include <linux/types.h>
 
 #include "reverb.h"
 
@@ -108,9 +109,9 @@ static int ic4;
 // denormals are zero
 static inline float daz( float f )
 {
-  // define an aliasing type to perform a "reinterpret cast"
-  typedef __u32 __attribute__ (( __may_alias__ )) u32bit;
-  if ( *( (u32bit*)&f ) & 0x7F000000 ) // E > 1 : normal.
+  uint32_t bits;
+  memcpy( &bits, &f, sizeof( bits ) );
+  if ( bits & 0x7F000000u ) // E > 1 : normal.
     return f;
   else // E <= 1 : zero or _almost_ denormal 
        // (may become denormal with next operation)
