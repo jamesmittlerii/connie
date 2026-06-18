@@ -54,10 +54,27 @@ add_executable(headless-dsp-test
 
 target_link_libraries(headless-dsp-test PRIVATE connie_dsp)
 
+add_executable(headless-lv2-test
+  "${CMAKE_SOURCE_DIR}/tests/headless_lv2_test.c"
+  source/connie_lv2.c
+)
+
+target_link_libraries(headless-lv2-test PRIVATE connie_dsp)
+
+target_include_directories(headless-lv2-test PRIVATE
+  "${CMAKE_SOURCE_DIR}/lv2/include"
+  "${CMAKE_SOURCE_DIR}"
+)
+
+if(WIN32)
+  target_compile_definitions(headless-lv2-test PRIVATE _USE_MATH_DEFINES)
+endif()
+
 add_custom_target(test-headless
   COMMAND headless-dsp-test
-  DEPENDS headless-dsp-test
-  COMMENT "Running headless DSP regression test"
+  COMMAND headless-lv2-test
+  DEPENDS headless-dsp-test headless-lv2-test
+  COMMENT "Running headless DSP and LV2 regression tests"
 )
 
 add_custom_command(TARGET connie-lv2 POST_BUILD
