@@ -22,6 +22,7 @@
 	],
 	[
 		a lv2:InputPort, atom:AtomPort;
+		atom:bufferType atom:Sequence;
 		atom:supports <http://lv2plug.in/ns/ext/midi#MidiEvent>;
 		lv2:index 2;
 		lv2:symbol "midi";

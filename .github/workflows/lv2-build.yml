@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install build tools
-        run: apt-get update && apt-get install -y cmake ninja-build build-essential binutils bash zip
+        run: apt-get update && apt-get install -y cmake ninja-build build-essential binutils bash zip lilv-utils
 
       - name: Configure
         run: |
@@ -62,12 +62,27 @@ jobs:
       - name: Run headless test
         run: cmake --build build-arm64 --target test-headless
 
+      - name: Verify LV2 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bund=build-arm64/connie.lv2
+          test -f "$bund/manifest.ttl"
+          test -f "$bund/connie.ttl"
+          test -f "$bund/connie.so"
+          if grep -q '@' "$bund/manifest.ttl"; then
+            echo "ERROR: manifest.ttl still has unexpanded @ placeholders:" >&2
+            cat "$bund/manifest.ttl" >&2
+            exit 1
+          fi
+          nm -D "$bund/connie.so" | grep -q ' lv2_descriptor'
+          LV2_PATH=build-arm64 lilv-plugin-list | grep -F 'https://ho-ro.net/connie/lv2'
+          echo "OK: LV2 bundle is discoverable by lilv"
+
       - name: Package LV2 bundle
         run: |
-          mkdir -p dist/connie.lv2
-          cp build-arm64/connie.so dist/connie.lv2/connie.so
-          cp lv2/connie.lv2/connie.ttl dist/connie.lv2/connie.ttl
-          cp build-arm64/connie.lv2/manifest.ttl dist/connie.lv2/manifest.ttl
+          rm -rf dist/connie.lv2
+          cp -r build-arm64/connie.lv2 dist/
           (cd dist && zip -r connie-lv2-linux-arm64.zip connie.lv2)
           (cd dist && sha256sum connie-lv2-linux-arm64.zip > sha256sums.txt)
 

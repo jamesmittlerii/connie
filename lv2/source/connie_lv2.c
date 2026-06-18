@@ -44,6 +44,7 @@ typedef struct {
   float *preset;
   LV2_URID midi_event_id;
   double sample_rate;
+  int host_drawbars_set;
 } ConnieLV2;
 
 static int norm_to_drawbar( float v ) {
@@ -55,13 +56,46 @@ static int norm_to_drawbar( float v ) {
   return d;
 }
 
+static void handle_atom_midi( ConnieLV2 *h, const LV2_Atom_Event *event ) {
+  const uint8_t *data = (const uint8_t *)LV2_ATOM_BODY_CONST( &event->body );
+  uint32_t size = event->body.size;
+
+  if ( event->body.type != h->midi_event_id || !data || size < 1 )
+    return;
+
+  /* Some hosts wrap raw MIDI in a nested MidiEvent atom. */
+  if ( size >= sizeof( LV2_Atom ) ) {
+    const LV2_Atom *atom = (const LV2_Atom *)data;
+    if ( atom->type == h->midi_event_id && atom->size + sizeof( LV2_Atom ) <= size ) {
+      data = (const uint8_t *)( atom + 1 );
+      size = atom->size;
+    }
+  }
+
+  uint8_t buf[3];
+  int32_t n = size > 3 ? 3 : (int32_t)size;
+  memcpy( buf, data, (size_t)n );
+  connie_dsp_midi( buf, n );
+}
+
 static void apply_controls( ConnieLV2 *h ) {
+  float drawbar_sum = 0.0f;
   for ( int i = 0; i < PORT_DB_COUNT; i++ )
-    connie_params_set_drawbar( i, norm_to_drawbar( *h->drawbars[i] ) );
+    drawbar_sum += *h->drawbars[i];
+
+  if ( !h->host_drawbars_set && drawbar_sum < 0.001f ) {
+    /* Headless hosts (e.g. mod-host) often leave controls at 0; keep preset. */
+  } else {
+    h->host_drawbars_set = 1;
+    for ( int i = 0; i < PORT_DB_COUNT; i++ )
+      connie_params_set_drawbar( i, norm_to_drawbar( *h->drawbars[i] ) );
+  }
   connie_params_apply_volumes();
 
-  if ( h->master )
-    tg_master_vol = *h->master;
+  if ( h->master ) {
+    float m = *h->master;
+    tg_master_vol = ( m > 0.0f ) ? m : 0.25f;
+  }
 
   if ( h->transpose )
     transpose = (int)( *h->transpose * 24.0f + 0.5f ) - 12;
@@ -160,7 +194,6 @@ static void run( LV2_Handle instance, uint32_t nframes ) {
         continue;
 
       const LV2_Atom_Event *event = (const LV2_Atom_Event *)ev;
-      const uint8_t *data = (const uint8_t *)LV2_ATOM_BODY_CONST( event );
       uint32_t size = event->body.size;
 
       uint32_t ev_frame = event->time.frames;
@@ -175,10 +208,7 @@ static void run( LV2_Handle instance, uint32_t nframes ) {
       }
 
       if ( size >= 1 ) {
-        uint8_t buf[3];
-        int32_t n = size > 3 ? 3 : (int32_t)size;
-        memcpy( buf, data, (size_t)n );
-        connie_dsp_midi( buf, n );
+        handle_atom_midi( h, event );
       }
     }
   }
