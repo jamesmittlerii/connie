@@ -57,16 +57,24 @@ static int norm_to_drawbar( float v ) {
   return d;
 }
 
-#define LV2_ATOM_HEADER_BYTES 8u
+#define LV2_ATOM_HEADER_BYTES        8u
+#define CONNIE_LV2_EVENT_BODY_OFFSET 8u
+
+_Static_assert( offsetof( LV2_Atom_Event, body ) == CONNIE_LV2_EVENT_BODY_OFFSET,
+                "LV2_Atom_Event layout mismatch" );
 
 static uint32_t read_u32_le( const uint8_t *p, uint32_t avail ) {
-  if ( avail < 4u ) {
-    return 0u;
+  uint32_t v   = 0u;
+  uint32_t mul = 1u;
+
+  for ( uint32_t i = 0; i < 4u; i++ ) {
+    if ( i >= avail ) {
+      return 0u;
+    }
+    v += (uint32_t)p[i] * mul;
+    mul *= 256u;
   }
-  return (uint32_t)p[0]
-       + (uint32_t)p[1] * 256u
-       + (uint32_t)p[2] * 65536u
-       + (uint32_t)p[3] * 16777216u;
+  return v;
 }
 
 static int64_t read_i64_le( const uint8_t *p, uint32_t avail ) {
@@ -84,7 +92,7 @@ static int64_t read_i64_le( const uint8_t *p, uint32_t avail ) {
 
 static uint32_t atom_event_bytes( const LV2_Atom_Event *event ) {
   const uint8_t *base     = (const uint8_t *)event;
-  const uint32_t body_off = (uint32_t)offsetof( LV2_Atom_Event, body );
+  const uint32_t body_off = CONNIE_LV2_EVENT_BODY_OFFSET;
   uint32_t payload_size   = read_u32_le( base + body_off + 4u, 4u );
   return body_off + LV2_ATOM_HEADER_BYTES + payload_size;
 }
@@ -120,7 +128,7 @@ static const uint8_t *atom_payload( const uint8_t *header,
 
 static void handle_atom_midi( const ConnieLV2 *h, const LV2_Atom_Event *event ) {
   const uint8_t *base     = (const uint8_t *)event;
-  const uint32_t body_off = (uint32_t)offsetof( LV2_Atom_Event, body );
+  const uint32_t body_off = CONNIE_LV2_EVENT_BODY_OFFSET;
   const uint32_t bound    = atom_event_bytes( event );
   const uint8_t *header   = base + body_off;
   uint32_t header_avail   = bound > body_off ? bound - body_off : 0u;
@@ -274,13 +282,17 @@ static void run( LV2_Handle instance, uint32_t nframes ) {
   float *out_r = h->out_r;
 
   if ( h->midi ) {
+    const LV2_Atom_Sequence *seq = h->midi;
+    LV2_Atom_Sequence_Body *seq_body =
+      (LV2_Atom_Sequence_Body *)( (uint8_t *)seq + sizeof( LV2_Atom ) );
     LV2_Atom_Event *ev;
-    for ( ev = lv2_atom_sequence_begin( &h->midi->body );
-          !lv2_atom_sequence_is_end( &h->midi->body, h->midi->atom.size, ev );
+
+    for ( ev = lv2_atom_sequence_begin( seq_body );
+          !lv2_atom_sequence_is_end( seq_body, seq->atom.size, ev );
           ev = lv2_atom_sequence_next( ev ) ) {
       const LV2_Atom_Event *event = (const LV2_Atom_Event *)ev;
       const uint8_t *base         = (const uint8_t *)ev;
-      const uint32_t body_off     = (uint32_t)offsetof( LV2_Atom_Event, body );
+      const uint32_t body_off     = CONNIE_LV2_EVENT_BODY_OFFSET;
       const uint32_t bound        = atom_event_bytes( event );
       const uint8_t *header       = base + body_off;
       uint32_t header_avail       = bound > body_off ? bound - body_off : 0u;
