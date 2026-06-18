@@ -1026,14 +1026,10 @@ int main( int argc, char *argv[] ) {
     }
     pp = jack_ports;
     while ( *pp ) {
-      const char *dest_l = *pp++;
-      if ( jack_connect( jack_client, jack_port_name( jack_audio_port_l ), dest_l ) != 0 )
-        continue;
-      if ( !*pp )
-        break;
-      const char *dest_r = *pp++;
-      if ( jack_connect( jack_client, jack_port_name( jack_audio_port_r ), dest_r ) == 0 )
-        break;
+      //puts( *pp );
+      if ( !jack_connect( jack_client, jack_port_name( jack_audio_port_l ), *pp++ )
+       &&  !jack_connect( jack_client, jack_port_name( jack_audio_port_r ), *pp++ ) )
+         break;
     }
     free( jack_ports );
   }

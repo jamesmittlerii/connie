@@ -7,7 +7,6 @@
  *****************************************************************************/
 
 #include <math.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,9 +19,6 @@
 extern const LV2_Descriptor *lv2_descriptor( uint32_t index );
 
 #define MIDI_EVENT_URI "http://lv2plug.in/ns/ext/midi#MidiEvent"
-
-#define LV2_ATOM_HEADER_BYTES          8u
-#define CONNIE_LV2_EVENT_BODY_OFFSET   8u
 
 #define URID_ATOM_SEQUENCE 2u
 #define URID_MIDI_EVENT    3u
@@ -60,18 +56,6 @@ static void init_sequence( LV2_Atom_Sequence *seq, LV2_URID seq_urid ) {
   seq->atom.size = sizeof( LV2_Atom_Sequence_Body );
 }
 
-static void write_u32_le( uint8_t *p, uint32_t v ) {
-  p[0] = (uint8_t)( v & 0xffu );
-  p[1] = (uint8_t)( ( v >> 8 ) & 0xffu );
-  p[2] = (uint8_t)( ( v >> 16 ) & 0xffu );
-  p[3] = (uint8_t)( ( v >> 24 ) & 0xffu );
-}
-
-static void write_i64_le( uint8_t *p, int64_t v ) {
-  for ( int i = 0; i < 8; i++ )
-    p[i] = (uint8_t)( (uint64_t)v >> ( 8 * i ) );
-}
-
 static int append_note_on( LV2_Atom_Sequence *seq,
                            uint32_t            capacity,
                            LV2_URID            midi_urid,
@@ -79,18 +63,18 @@ static int append_note_on( LV2_Atom_Sequence *seq,
                            uint8_t             note,
                            uint8_t             velocity ) {
   uint8_t storage[64];
-  const size_t body_off     = CONNIE_LV2_EVENT_BODY_OFFSET;
-  const size_t payload_off  = body_off + sizeof( LV2_Atom );
+  LV2_Atom_Event *ev = (LV2_Atom_Event *)storage;
 
-  memset( storage, 0, sizeof( storage ) );
-  write_i64_le( storage, (int64_t)frame );
-  write_u32_le( storage + body_off, midi_urid );
-  write_u32_le( storage + body_off + 4, 3u );
-  storage[payload_off + 0] = 0x90;
-  storage[payload_off + 1] = note;
-  storage[payload_off + 2] = velocity;
+  ev->time.frames = (int64_t)frame;
+  ev->body.type   = midi_urid;
+  ev->body.size   = 3;
 
-  return lv2_atom_sequence_append_event( seq, capacity, (const LV2_Atom_Event *)storage ) ? 0 : -1;
+  uint8_t *midi = (uint8_t *)LV2_ATOM_BODY( &ev->body );
+  midi[0]       = 0x90;
+  midi[1]       = note;
+  midi[2]       = velocity;
+
+  return lv2_atom_sequence_append_event( seq, capacity, ev ) ? 0 : -1;
 }
 
 static float render_energy( const LV2_Descriptor *desc,
