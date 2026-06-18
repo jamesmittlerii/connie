@@ -60,28 +60,34 @@ static int ui_presets = PRESETS_0;
 static int ui_model = CONNIE;
 static int ui_program = 0;
 
+static float squared_vol( int level, float divisor ) {
+  float f = (float)level;
+  return f * f / divisor;
+}
+
 static void set_volumes_0( void ) {
-  tg_vol[0] = ui_draw[0] * ui_draw[0] / 64.0f;
-  tg_vol[2] = ui_draw[1] * ui_draw[1] / 64.0f;
-  tg_vol[3] = ui_draw[2] * ui_draw[2] / 64.0f;
-  tg_vol[4] =
-  tg_vol[5] =
-  tg_vol[6] =
-  tg_vol[8] = ui_draw[3] * ui_draw[3] / 64.0f;
-  tg_vol_fl     = ui_draw[4] * ui_draw[4] / 64.0f;
-  tg_vol_rd     = ui_draw[5] * ui_draw[5] / 64.0f;
-  tg_vol_sh     = ui_draw[6] * ui_draw[6] / 96.0f;
-  tg_percussion = ui_draw[7] / 8.0f;
-  tg_vibrato    = ui_draw[8] / 8.0f;
-  tg_reverb     = ui_draw[9] * ui_draw[9] / 64.0f;
+  tg_vol[0] = squared_vol( ui_draw[0], 64.0f );
+  tg_vol[2] = squared_vol( ui_draw[1], 64.0f );
+  tg_vol[3] = squared_vol( ui_draw[2], 64.0f );
+  float mixture = squared_vol( ui_draw[3], 64.0f );
+  tg_vol[4] = mixture;
+  tg_vol[5] = mixture;
+  tg_vol[6] = mixture;
+  tg_vol[8] = mixture;
+  tg_vol_fl     = squared_vol( ui_draw[4], 64.0f );
+  tg_vol_rd     = squared_vol( ui_draw[5], 64.0f );
+  tg_vol_sh     = squared_vol( ui_draw[6], 96.0f );
+  tg_percussion = (float)ui_draw[7] / 8.0f;
+  tg_vibrato    = (float)ui_draw[8] / 8.0f;
+  tg_reverb     = squared_vol( ui_draw[9], 64.0f );
 }
 
 static void set_volumes_1( void ) {
   for ( int i = 0; i < STOPS_1; i++ )
-    tg_vol[i] = ui_draw[i] * ui_draw[i] / 64.0f;
-  tg_percussion = ui_draw[STOPS_1] / 8.0f;
-  tg_vibrato    = ui_draw[STOPS_1 + 1] / 8.0f;
-  tg_reverb     = ui_draw[STOPS_1 + 2] * ui_draw[STOPS_1 + 2] / 64.0f;
+    tg_vol[i] = squared_vol( ui_draw[i], 64.0f );
+  tg_percussion = (float)ui_draw[STOPS_1] / 8.0f;
+  tg_vibrato    = (float)ui_draw[STOPS_1 + 1] / 8.0f;
+  tg_reverb     = squared_vol( ui_draw[STOPS_1 + 2], 64.0f );
   tg_vol_fl = 1.0f;
   tg_vol_rd = 0.0f;
   tg_vol_sh = 0.0f;
@@ -89,20 +95,16 @@ static void set_volumes_1( void ) {
 
 void connie_params_set_model( model_t model ) {
   connie_model = model;
-  switch ( model ) {
-    default:
-    case CONNIE:
-      ui_draw = ui_draw_0;
-      ui_drawbars = DRAWBARS_0;
-      ui_presets = PRESETS_0;
-      ui_model = CONNIE;
-      break;
-    case HAMMOND:
-      ui_draw = ui_draw_1;
-      ui_drawbars = DRAWBARS_1;
-      ui_presets = PRESETS_1;
-      ui_model = HAMMOND;
-      break;
+  if ( model == HAMMOND ) {
+    ui_draw = ui_draw_1;
+    ui_drawbars = DRAWBARS_1;
+    ui_presets = PRESETS_1;
+    ui_model = HAMMOND;
+  } else {
+    ui_draw = ui_draw_0;
+    ui_drawbars = DRAWBARS_0;
+    ui_presets = PRESETS_0;
+    ui_model = CONNIE;
   }
 }
 
@@ -146,6 +148,8 @@ int connie_params_set_program( int prog ) {
     case HAMMOND:
       for ( int i = 0; i < DRAWBARS_1; i++ )
         ui_draw[i] = ui_preset_1[prog][i];
+      break;
+    default:
       break;
   }
   connie_params_apply_volumes();

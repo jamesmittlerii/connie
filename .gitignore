@@ -29,3 +29,10 @@ Testing/
 
 # MSVC link artifacts outside build trees
 *.exp
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editor (local machine/personal settings)
+.vscode/

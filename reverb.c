@@ -48,9 +48,9 @@
 #define NA2  337
 #define NA3  113
 // gain
-#define GA1 0.707
-#define GA2 0.707
-#define GA3 0.707
+#define GA1 0.707f
+#define GA2 0.707f
+#define GA3 0.707f
 // delay lines
 static float ap1[NA1];
 static float ap2[NA2];
@@ -115,7 +115,7 @@ static inline float daz( float f )
     return f;
   else // E <= 1 : zero or _almost_ denormal 
        // (may become denormal with next operation)
-    return 0.0;
+    return 0.0f;
 }
 
 
@@ -125,12 +125,16 @@ static inline float daz( float f )
 //
 float reverb( float xin )
 {
-  static float yout = 0.0;
-  static float xv0, xv1, yv0, yv1;
-  float x, y;
+  static float yout = 0.0f;
+  static float xv0;
+  static float xv1;
+  static float yv0;
+  static float yv1;
+  float x;
+  float y;
 
   // additional feedback
-  x  = daz( xin/8 + yout/64 );
+  x  = daz( xin / 8.0f + yout / 64.0f );
 
 // three all pass filters
   y = ap1[ia1];
@@ -156,12 +160,12 @@ float reverb( float xin )
 // four feed forward comb filters 
 
 // gain
-#define GC1 0.742
-#define GC2 0.733
-#define GC3 0.715
-#define GC4 0.697
+#define GC1 0.742f
+#define GC2 0.733f
+#define GC3 0.715f
+#define GC4 0.697f
 
-  yout = 0;
+  yout = 0.0f;
 
   yout += x + GC1 * cf1[ic1];
   cf1[ic1] = x;
@@ -188,12 +192,12 @@ float reverb( float xin )
 // four recursive comb filters
 
 // gain
-#define GC1 0.7
-#define GC2 0.7
-#define GC3 0.7
-#define GC4 0.7
+#define GC1 0.7f
+#define GC2 0.7f
+#define GC3 0.7f
+#define GC4 0.7f
 
-  yout = 0.0;
+  yout = 0.0f;
 
   y = cf1[ic1];
   cf1[ic1] = daz( x + GC1 * y );
@@ -223,9 +227,10 @@ float reverb( float xin )
 
   // IIR LP filter 3000 Hz
   xv0 = xv1;
-  xv1 = yout/6;
+  xv1 = yout / 6.0f;
   yv0 = yv1;
-  yout = yv1 = daz( xv0 + xv1 + 0.668 * yv0 );
+  yout = daz( xv0 + xv1 + 0.668f * yv0 );
+  yv1 = yout;
 
   return yout;
 

@@ -194,8 +194,10 @@ static int soft_step[ 2 * VOL_RAW_MAX + 1 ];
 
 //
 void tg_panic( void ) {
-  for ( int iii = 0; iii < MIDI_MAX; iii++ )
-    tg_vol_key[iii] = midi_vol_raw[iii] = 0;
+  for ( int iii = 0; iii < MIDI_MAX; iii++ ) {
+    midi_vol_raw[iii] = 0;
+    tg_vol_key[iii] = 0;
+  }
   for ( int iii = 0; iii < NOTE_MAX; iii++ )
     tg_vol_note[iii] = 0;
 }
@@ -204,11 +206,12 @@ void tg_panic( void ) {
 
 // soft clipping f(x) = x - 1/3 * x^3
 static sample_t clip( sample_t sample ) {
-  if ( sample > 1.0 )
-    sample = 2.0/3.0;
-  else if ( sample < -1.0 )
-    sample = -2.0/3.0;
-  else sample = sample - ( sample * sample * sample ) / 3.0;
+  if ( sample > 1.0f )
+    sample = 2.0f / 3.0f;
+  else if ( sample < -1.0f )
+    sample = -2.0f / 3.0f;
+  else
+    sample = sample - ( sample * sample * sample ) / 3.0f;
   return sample;
 }
 
@@ -379,9 +382,11 @@ static int rt_process_cb( jack_nframes_t nframes, void *void_arg ) {
       shift_offset += tg_vibrato * VIBRATO / TG_STEP; // shift frequency
       if ( shift_offset >= tg_sam_in_cy )
         shift_offset -= tg_sam_in_cy;
-      shift = tg_cycle_fl[ pos = shift_offset ];
+      pos = shift_offset;
+      shift = tg_cycle_fl[ pos ];
     } else {
-      shift_offset = shift = 0.0;
+      shift_offset = 0.0;
+      shift = 0.0;
     }
 
     // process the keys (attac/decay/release), do stop mixture
@@ -436,16 +441,16 @@ static int rt_process_cb( jack_nframes_t nframes, void *void_arg ) {
       //
       for ( int key = LOWNOTE; key < HIGHNOTE; key++ ) {
         if ( *p_key ) { // key pressed?
-          float *p_vol = tg_vol;
-          *p_16  += *p_key * *p_vol++; // vol_16
-          *p_513 += *p_key * *p_vol++; // vol_513
-          *p_8   += *p_key * *p_vol++;
-          *p_4   += *p_key * *p_vol++;
-          *p_223 += *p_key * *p_vol++;
-          *p_2   += *p_key * *p_vol++;
-          *p_135 += *p_key * *p_vol++;
-          *p_113 += *p_key * *p_vol++;
-          *p_1   += *p_key * *p_vol++; // vol_1
+          float *p_stop_vol = tg_vol;
+          *p_16  += *p_key * *p_stop_vol++; // vol_16
+          *p_513 += *p_key * *p_stop_vol++; // vol_513
+          *p_8   += *p_key * *p_stop_vol++;
+          *p_4   += *p_key * *p_stop_vol++;
+          *p_223 += *p_key * *p_stop_vol++;
+          *p_2   += *p_key * *p_stop_vol++;
+          *p_135 += *p_key * *p_stop_vol++;
+          *p_113 += *p_key * *p_stop_vol++;
+          *p_1   += *p_key * *p_stop_vol++; // vol_1
         } // if ( *p_key )
         p_key++;
         p_16++;
@@ -533,6 +538,7 @@ static void jack_error_cb( const char *desc ) {
 
 // callback at jack shutdown
 static void jack_shutdown_cb( void *arg ) {
+  (void)arg;
   fprintf( stderr, "connie: JACK shutdown\n" );
   exit( 0 );
 }
@@ -633,7 +639,7 @@ static sample_t rect_bl( float arg, int order, int partials ) {
 
 
 
-static void tg_init( int tg_sample_rate )
+static void tg_init( int sample_rate )
 {
   // build list of eq. tuned midi frequencies starting from lowest C (note 0)
   // (three halftones above the very low A six octaves down from a' 440 Hz)
@@ -664,7 +670,7 @@ static void tg_init( int tg_sample_rate )
 
   // create 1 cycle of the wave
   // calculate the number of samples in one cycle of the wave
-  tg_sam_in_cy = tg_sample_rate / TG_STEP + 1;
+  tg_sam_in_cy = sample_rate / TG_STEP + 1;
 
 
   // one size fits all (flute)
@@ -712,7 +718,7 @@ static void tg_init( int tg_sample_rate )
       int refnote = LOWNOTE + 12 * oct + 12;
       if ( refnote >= MIDI_MAX )
         refnote = MIDI_MAX - 1;
-      int partials = tg_sample_rate / 2.0 / tg_midi_freq[ refnote ];
+      int partials = sample_rate / 2.0 / tg_midi_freq[ refnote ];
       printf( "." );
       fflush( stdout );
       for ( int i=0; i < tg_sam_in_cy; i++ ) {
@@ -889,7 +895,7 @@ int main( int argc, char *argv[] ) {
     printf( "  -i INSTRUMENT\t\t0: connie (default), 1: poor-man's-hammond\n" );
     printf( "  -m MIDI_PORT\t\tconnect with midi port\n" );
     printf( "  -p PITCH\t\tconcert pitch 220..880 Hz\n" );
-    printf( "  -s INTONATION_SCALE\t 0: %s\n", scales->label );
+    printf( "  -s INTONATION_SCALE\t 0: %s\n", scales[0].label );
     for ( int iii = 1; iii < NSCALES; iii++ ) {
       printf( "\t\t\t%2d: %s\n", iii, scales[iii].label );
     }
@@ -1026,10 +1032,15 @@ int main( int argc, char *argv[] ) {
     }
     pp = jack_ports;
     while ( *pp ) {
-      //puts( *pp );
-      if ( !jack_connect( jack_client, jack_port_name( jack_audio_port_l ), *pp++ )
-       &&  !jack_connect( jack_client, jack_port_name( jack_audio_port_r ), *pp++ ) )
-         break;
+      const char *port_l = *pp++;
+      if ( jack_connect( jack_client, jack_port_name( jack_audio_port_l ), port_l ) != 0 )
+        continue;
+      if ( !*pp )
+        break;
+      const char *port_r = *pp++;
+      if ( jack_connect( jack_client, jack_port_name( jack_audio_port_r ), port_r ) != 0 )
+        continue;
+      break;
     }
     free( jack_ports );
   }
