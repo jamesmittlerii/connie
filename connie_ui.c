@@ -456,6 +456,29 @@ void ui_init( const int connie_model, const keybd_t kbd ) {
   ui_set_program( 0 );
 }
 
+static void write_session_file( void ) {
+  FILE *cfg = fopen( ".connie_session", "w" );
+  if ( !cfg )
+    return;
+  fprintf( cfg, "###########################\n" );
+  fprintf( cfg, "### connie session file ###\n" );
+  fprintf( cfg, "###########################\n\n" );
+  if ( uuid )
+    fprintf( cfg, "UUID = \"%s\"\n", uuid );
+  fprintf( cfg, "jack_name = \"%s\"\n", jack_name );
+  fprintf( cfg, "connie_model = %d\n", ui_connie_model );
+  fprintf( cfg, "keybd = %d\n", ui_kbd );
+  fprintf( cfg, "intonation = %d\n", intonation );
+  fprintf( cfg, "concert_pitch = %f\n", concert_pitch );
+  fprintf( cfg, "transpose = %d\n", transpose );
+  fprintf( cfg, "midi_channel = %d\n", tg_midi_channel );
+  fprintf( cfg, "drawbars = { " );
+  for ( int iii = 0; iii < ui_drawbars; iii++ )
+    fprintf( cfg, "%d, ", ui_draw[iii] );
+  fprintf( cfg, "}\n" );
+  fclose( cfg );
+  printf( "ui_status = %d, session_dir = %s\n", ui_status, session_dir );
+}
 
 
 void ui_loop( const char *name ) {
@@ -506,36 +529,19 @@ void ui_loop( const char *name ) {
       usleep( 10000 );
     }
     switch ( ui_status ) {
-      default:
+      case 0:
+        break;
       case 1:
       case 3:
         ui_status = 0;
-        /* fall through */
+        write_session_file();
+        break;
       case 2:
-        {
-          FILE *cfg = fopen( ".connie_session", "w" );
-          fprintf( cfg, "###########################\n" );
-          fprintf( cfg, "### connie session file ###\n" );
-          fprintf( cfg, "###########################\n\n" );
-          if ( uuid )
-            fprintf( cfg, "UUID = \"%s\"\n", uuid );
-          fprintf( cfg, "jack_name = \"%s\"\n", jack_name );
-          fprintf( cfg, "connie_model = %d\n", ui_connie_model );
-          fprintf( cfg, "keybd = %d\n", ui_kbd );
-          fprintf( cfg, "intonation = %d\n", intonation );
-          fprintf( cfg, "concert_pitch = %f\n", concert_pitch );
-          fprintf( cfg, "transpose = %d\n", transpose );
-          fprintf( cfg, "midi_channel = %d\n", tg_midi_channel );
-          fprintf( cfg, "drawbars = { " );
-          for ( int iii=0; iii < ui_drawbars; iii++ ) {
-            fprintf( cfg, "%d, ", ui_draw[iii] );
-          }
-          fprintf( cfg, "}\n" );
-          fclose( cfg );
-          printf( "ui_status = %d, session_dir = %s\n", ui_status, session_dir );
-        }
-        /* fall through */
-      case 0:
+        write_session_file();
+        break;
+      default:
+        ui_status = 0;
+        write_session_file();
         break;
     }
   } //while 2 != ui_status

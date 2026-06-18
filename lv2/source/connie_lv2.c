@@ -58,15 +58,18 @@ static int norm_to_drawbar( float v ) {
 }
 
 static LV2_URID atom_type( const uint8_t *header ) {
-  LV2_URID type;
-  memcpy( &type, header, sizeof( type ) );
-  return type;
+  return ((const LV2_Atom *)header)->type;
 }
 
 static uint32_t atom_payload_size( const uint8_t *header ) {
-  uint32_t size;
-  memcpy( &size, header + sizeof( LV2_URID ), sizeof( size ) );
-  return size;
+  return ((const LV2_Atom *)header)->size;
+}
+
+static int32_t copy_midi_message( uint8_t *dst, const uint8_t *src, uint32_t src_size ) {
+  int32_t n = src_size > 3u ? 3 : (int32_t)src_size;
+  for ( int32_t i = 0; i < n; i++ )
+    dst[i] = src[i];
+  return n;
 }
 
 static const uint8_t *atom_payload( const uint8_t *header, uint32_t *payload_size ) {
@@ -96,8 +99,7 @@ static void handle_atom_midi( const ConnieLV2 *h, const LV2_Atom_Event *event ) 
   }
 
   uint8_t buf[3];
-  int32_t n = size > 3 ? 3 : (int32_t)size;
-  memcpy( buf, data, (size_t)n );
+  int32_t n = copy_midi_message( buf, data, size );
   connie_dsp_midi( buf, n );
 }
 
