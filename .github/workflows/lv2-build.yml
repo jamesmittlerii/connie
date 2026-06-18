@@ -79,9 +79,14 @@ jobs:
           echo "OK: LV2 bundle layout and exports verified"
 
       - name: Package LV2 bundle
+        shell: bash
         run: |
-          rm -rf dist/connie.lv2
-          cp -r build-arm64/connie.lv2 dist/
+          set -euo pipefail
+          bund=build-arm64/connie.lv2
+          mkdir -p dist/connie.lv2
+          cp "$bund/connie.so" dist/connie.lv2/
+          cp "$bund/connie.ttl" dist/connie.lv2/
+          cp "$bund/manifest.ttl" dist/connie.lv2/
           (cd dist && zip -r connie-lv2-linux-arm64.zip connie.lv2)
           (cd dist && sha256sum connie-lv2-linux-arm64.zip > sha256sums.txt)
 

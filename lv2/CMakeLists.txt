@@ -14,13 +14,16 @@ endif()
 
 set(CONNIE_LV2_BUNDLE_DIR "${default_lv2_bundle_dir}" CACHE PATH "LV2 bundle install directory")
 
+# Bundle and plugin binary live in the top-level build dir (not lv2/ subdir).
+set(CONNIE_LV2_BUILD_DIR "${PROJECT_BINARY_DIR}")
+
 configure_file(
   "${CMAKE_SOURCE_DIR}/lv2/connie.lv2/manifest.ttl.in"
-  "${CMAKE_BINARY_DIR}/connie.lv2/manifest.ttl"
+  "${CONNIE_LV2_BUILD_DIR}/connie.lv2/manifest.ttl"
   @ONLY
 )
 
-file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/connie.lv2")
+file(MAKE_DIRECTORY "${CONNIE_LV2_BUILD_DIR}/connie.lv2")
 
 add_library(connie-lv2 MODULE
   source/connie_lv2.c
@@ -29,8 +32,8 @@ add_library(connie-lv2 MODULE
 set_target_properties(connie-lv2 PROPERTIES
   OUTPUT_NAME "connie"
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+  LIBRARY_OUTPUT_DIRECTORY "${CONNIE_LV2_BUILD_DIR}"
+  RUNTIME_OUTPUT_DIRECTORY "${CONNIE_LV2_BUILD_DIR}"
 )
 
 if(WIN32)
@@ -80,13 +83,13 @@ add_custom_target(test-headless
 add_custom_command(TARGET connie-lv2 POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           $<TARGET_FILE:connie-lv2>
-          "${CMAKE_BINARY_DIR}/connie.lv2/${CONNIE_LV2_BINARY_NAME}"
+          "${CONNIE_LV2_BUILD_DIR}/connie.lv2/${CONNIE_LV2_BINARY_NAME}"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           "${CMAKE_SOURCE_DIR}/lv2/connie.lv2/connie.ttl"
-          "${CMAKE_BINARY_DIR}/connie.lv2/connie.ttl"
+          "${CONNIE_LV2_BUILD_DIR}/connie.lv2/connie.ttl"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${CMAKE_BINARY_DIR}/connie.lv2/manifest.ttl"
-          "${CMAKE_BINARY_DIR}/connie.lv2/manifest.ttl"
+          "${CONNIE_LV2_BUILD_DIR}/connie.lv2/manifest.ttl"
+          "${CONNIE_LV2_BUILD_DIR}/connie.lv2/manifest.ttl"
 )
 
 install(TARGETS connie-lv2
@@ -96,6 +99,6 @@ install(TARGETS connie-lv2
 
 install(FILES
   "${CMAKE_SOURCE_DIR}/lv2/connie.lv2/connie.ttl"
-  "${CMAKE_BINARY_DIR}/connie.lv2/manifest.ttl"
+  "${CONNIE_LV2_BUILD_DIR}/connie.lv2/manifest.ttl"
   DESTINATION "${CONNIE_LV2_BUNDLE_DIR}"
 )
