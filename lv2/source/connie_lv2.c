@@ -57,19 +57,47 @@ static int norm_to_drawbar( float v ) {
   return d;
 }
 
-static uint32_t read_u32_le( const uint8_t *p ) {
+#define LV2_ATOM_HEADER_BYTES 8u
+
+static uint32_t read_u32_le( const uint8_t *p, uint32_t avail ) {
+  if ( avail < 4u ) {
+    return 0u;
+  }
   return (uint32_t)p[0]
-       | ( (uint32_t)p[1] << 8 )
-       | ( (uint32_t)p[2] << 16 )
-       | ( (uint32_t)p[3] << 24 );
+       + (uint32_t)p[1] * 256u
+       + (uint32_t)p[2] * 65536u
+       + (uint32_t)p[3] * 16777216u;
 }
 
-static LV2_URID atom_type( const uint8_t *header ) {
-  return read_u32_le( header );
+static int64_t read_i64_le( const uint8_t *p, uint32_t avail ) {
+  if ( avail < 8u ) {
+    return 0;
+  }
+  uint64_t v     = 0;
+  uint64_t scale = 1;
+  for ( uint32_t i = 0; i < 8u; i++ ) {
+    v += (uint64_t)p[i] * scale;
+    scale *= 256ull;
+  }
+  return (int64_t)v;
 }
 
-static uint32_t atom_payload_size( const uint8_t *header ) {
-  return read_u32_le( header + 4 );
+static uint32_t atom_event_bytes( const LV2_Atom_Event *event ) {
+  const uint8_t *base     = (const uint8_t *)event;
+  const uint32_t body_off = (uint32_t)offsetof( LV2_Atom_Event, body );
+  uint32_t payload_size   = read_u32_le( base + body_off + 4u, 4u );
+  return body_off + LV2_ATOM_HEADER_BYTES + payload_size;
+}
+
+static LV2_URID atom_type( const uint8_t *header, uint32_t header_avail ) {
+  return read_u32_le( header, header_avail );
+}
+
+static uint32_t atom_payload_size( const uint8_t *header, uint32_t header_avail ) {
+  if ( header_avail < LV2_ATOM_HEADER_BYTES ) {
+    return 0u;
+  }
+  return read_u32_le( header + 4u, header_avail - 4u );
 }
 
 static int32_t copy_midi_message( uint8_t *dst, const uint8_t *src, uint32_t src_size ) {
@@ -79,26 +107,51 @@ static int32_t copy_midi_message( uint8_t *dst, const uint8_t *src, uint32_t src
   return n;
 }
 
-static const uint8_t *atom_payload( const uint8_t *header, uint32_t *payload_size ) {
-  *payload_size = atom_payload_size( header );
-  return header + sizeof( LV2_Atom );
+static const uint8_t *atom_payload( const uint8_t *header,
+                                    uint32_t header_avail,
+                                    uint32_t *payload_size ) {
+  if ( header_avail < LV2_ATOM_HEADER_BYTES ) {
+    *payload_size = 0u;
+    return header + LV2_ATOM_HEADER_BYTES;
+  }
+  *payload_size = atom_payload_size( header, header_avail );
+  return header + LV2_ATOM_HEADER_BYTES;
 }
 
 static void handle_atom_midi( const ConnieLV2 *h, const LV2_Atom_Event *event ) {
-  const uint8_t *header = (const uint8_t *)event + offsetof( LV2_Atom_Event, body );
+  const uint8_t *base     = (const uint8_t *)event;
+  const uint32_t body_off = (uint32_t)offsetof( LV2_Atom_Event, body );
+  const uint32_t bound    = atom_event_bytes( event );
+  const uint8_t *header   = base + body_off;
+  uint32_t header_avail   = bound > body_off ? bound - body_off : 0u;
   uint32_t size;
-  const uint8_t *data = atom_payload( header, &size );
+  const uint8_t *data;
 
-  if ( atom_type( header ) != h->midi_event_id || size < 1 )
+  if ( header_avail < LV2_ATOM_HEADER_BYTES ) {
     return;
+  }
+  if ( atom_type( header, header_avail ) != h->midi_event_id ) {
+    return;
+  }
+
+  data = atom_payload( header, header_avail, &size );
+  if ( size < 1u ) {
+    return;
+  }
+  if ( body_off + LV2_ATOM_HEADER_BYTES + size > bound ) {
+    size = bound - body_off - LV2_ATOM_HEADER_BYTES;
+  }
+  if ( size < 1u ) {
+    return;
+  }
 
   /* Some hosts wrap raw MIDI in a nested MidiEvent atom. */
-  if ( size >= sizeof( LV2_Atom ) ) {
+  if ( size >= LV2_ATOM_HEADER_BYTES ) {
     const uint8_t *nested_header = data;
-    if ( atom_type( nested_header ) == h->midi_event_id ) {
+    if ( atom_type( nested_header, size ) == h->midi_event_id ) {
       uint32_t nested_size;
-      const uint8_t *nested_data = atom_payload( nested_header, &nested_size );
-      if ( sizeof( LV2_Atom ) + nested_size <= size ) {
+      const uint8_t *nested_data = atom_payload( nested_header, size, &nested_size );
+      if ( LV2_ATOM_HEADER_BYTES + nested_size <= size ) {
         data = nested_data;
         size = nested_size;
       }
@@ -225,14 +278,23 @@ static void run( LV2_Handle instance, uint32_t nframes ) {
     for ( ev = lv2_atom_sequence_begin( &h->midi->body );
           !lv2_atom_sequence_is_end( &h->midi->body, h->midi->atom.size, ev );
           ev = lv2_atom_sequence_next( ev ) ) {
-      const uint8_t *header = (const uint8_t *)ev + offsetof( LV2_Atom_Event, body );
-      if ( atom_type( header ) != h->midi_event_id )
-        continue;
-
       const LV2_Atom_Event *event = (const LV2_Atom_Event *)ev;
-      uint32_t size = atom_payload_size( header );
+      const uint8_t *base         = (const uint8_t *)ev;
+      const uint32_t body_off     = (uint32_t)offsetof( LV2_Atom_Event, body );
+      const uint32_t bound        = atom_event_bytes( event );
+      const uint8_t *header       = base + body_off;
+      uint32_t header_avail       = bound > body_off ? bound - body_off : 0u;
+      uint32_t size;
 
-      uint32_t ev_frame = event->time.frames;
+      if ( header_avail < LV2_ATOM_HEADER_BYTES ) {
+        continue;
+      }
+      if ( atom_type( header, header_avail ) != h->midi_event_id ) {
+        continue;
+      }
+      size = atom_payload_size( header, header_avail );
+
+      uint32_t ev_frame = (uint32_t)read_i64_le( base, (uint32_t)body_off );
       if ( ev_frame > nframes )
         ev_frame = nframes;
       if ( ev_frame > frame ) {
