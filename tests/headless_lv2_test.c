@@ -1,0 +1,181 @@
+/*****************************************************************************
+ *
+ *   headless_lv2_test.c
+ *
+ *   Minimal LV2 host smoke test: atom MIDI in, audio out
+ *
+ *****************************************************************************/
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <lv2/lv2plug.in/ns/lv2core/lv2.h>
+#include <lv2/lv2plug.in/ns/ext/atom/atom.h>
+#include <lv2/lv2plug.in/ns/ext/atom/util.h>
+#include <lv2/lv2plug.in/ns/ext/urid/urid.h>
+
+extern const LV2_Descriptor *lv2_descriptor( uint32_t index );
+
+#define MIDI_EVENT_URI "http://lv2plug.in/ns/ext/midi#MidiEvent"
+
+#define URID_ATOM_SEQUENCE 2u
+#define URID_MIDI_EVENT    3u
+
+typedef struct {
+  const char *uri;
+  LV2_URID    id;
+} urid_entry_t;
+
+static const urid_entry_t urid_table[] = {
+  { LV2_ATOM__Sequence, URID_ATOM_SEQUENCE },
+  { MIDI_EVENT_URI,     URID_MIDI_EVENT },
+};
+
+static LV2_URID map_uri( LV2_URID_Map_Handle handle, const char *uri ) {
+  (void)handle;
+  for ( size_t i = 0; i < sizeof( urid_table ) / sizeof( urid_table[0] ); i++ ) {
+    if ( !strcmp( uri, urid_table[i].uri ) )
+      return urid_table[i].id;
+  }
+  return 0;
+}
+
+static float buffer_energy( const float *buf, uint32_t n ) {
+  float acc = 0.0f;
+  for ( uint32_t i = 0; i < n; i++ ) {
+    float v = buf[i];
+    acc += v < 0.0f ? -v : v;
+  }
+  return acc;
+}
+
+static void init_sequence( LV2_Atom_Sequence *seq, LV2_URID seq_urid ) {
+  seq->atom.type = seq_urid;
+  seq->atom.size = sizeof( LV2_Atom_Sequence_Body );
+}
+
+static int append_note_on( LV2_Atom_Sequence *seq,
+                           uint32_t            capacity,
+                           LV2_URID            midi_urid,
+                           uint32_t            frame,
+                           uint8_t             note,
+                           uint8_t             velocity ) {
+  uint8_t storage[64];
+  LV2_Atom_Event *ev = (LV2_Atom_Event *)storage;
+
+  ev->time.frames = (int64_t)frame;
+  ev->body.type   = midi_urid;
+  ev->body.size   = 3;
+
+  uint8_t *midi = (uint8_t *)LV2_ATOM_BODY( &ev->body );
+  midi[0]       = 0x90;
+  midi[1]       = note;
+  midi[2]       = velocity;
+
+  return lv2_atom_sequence_append_event( seq, capacity, ev ) ? 0 : -1;
+}
+
+static float render_energy( const LV2_Descriptor *desc,
+                            LV2_Handle            handle,
+                            LV2_Atom_Sequence    *midi,
+                            uint32_t              nframes ) {
+  float *left  = (float *)calloc( nframes, sizeof( float ) );
+  float *right = (float *)calloc( nframes, sizeof( float ) );
+  if ( !left || !right ) {
+    free( left );
+    free( right );
+    return 0.0f;
+  }
+
+  desc->connect_port( handle, 0, left );
+  desc->connect_port( handle, 1, right );
+  desc->connect_port( handle, 2, midi );
+  desc->run( handle, nframes );
+
+  float energy = buffer_energy( left, nframes ) + buffer_energy( right, nframes );
+  free( left );
+  free( right );
+  return energy;
+}
+
+int main( void ) {
+  const LV2_Descriptor *desc = lv2_descriptor( 0 );
+  if ( !desc || !desc->instantiate || !desc->connect_port || !desc->activate ||
+       !desc->run || !desc->deactivate || !desc->cleanup ) {
+    fprintf( stderr, "FAIL: missing LV2 descriptor\n" );
+    return EXIT_FAILURE;
+  }
+
+  LV2_URID_Map map = { NULL, map_uri };
+  LV2_Feature   urid_feature = { LV2_URID__map, &map };
+  const LV2_Feature *features[] = { &urid_feature, NULL };
+
+  LV2_Handle handle = desc->instantiate( desc, 48000.0, "", features );
+  if ( !handle ) {
+    fprintf( stderr, "FAIL: instantiate returned NULL\n" );
+    return EXIT_FAILURE;
+  }
+
+  float enabled   = 1.0f;
+  float master    = 1.0f;
+  float transpose = 0.5f;
+  float preset    = 0.0f;
+  float drawbars[10];
+
+  memset( drawbars, 0, sizeof( drawbars ) );
+
+  desc->connect_port( handle, 3, &enabled );
+  desc->connect_port( handle, 14, &master );
+  desc->connect_port( handle, 15, &transpose );
+  desc->connect_port( handle, 16, &preset );
+  for ( int i = 0; i < 10; i++ )
+    desc->connect_port( handle, (uint32_t)( 4 + i ), &drawbars[i] );
+
+  desc->activate( handle );
+
+  uint8_t midi_buf[512];
+  LV2_Atom_Sequence *midi = (LV2_Atom_Sequence *)midi_buf;
+  init_sequence( midi, URID_ATOM_SEQUENCE );
+
+  float silent = render_energy( desc, handle, midi, 1024 );
+  if ( silent > 1e-3f ) {
+    fprintf( stderr, "FAIL: expected silence with no MIDI, got energy=%g\n", silent );
+    desc->deactivate( handle );
+    desc->cleanup( handle );
+    return EXIT_FAILURE;
+  }
+
+  if ( append_note_on( midi, (uint32_t)sizeof( midi_buf ), URID_MIDI_EVENT, 0, 60, 127 ) ) {
+    fprintf( stderr, "FAIL: could not append MIDI note-on event\n" );
+    desc->deactivate( handle );
+    desc->cleanup( handle );
+    return EXIT_FAILURE;
+  }
+
+  float on_energy = render_energy( desc, handle, midi, 4096 );
+  if ( on_energy <= 1e-4f ) {
+    fprintf( stderr, "FAIL: expected audio for atom MIDI note on, got %g\n", on_energy );
+    desc->deactivate( handle );
+    desc->cleanup( handle );
+    return EXIT_FAILURE;
+  }
+
+  master = 0.2f;
+  float low = render_energy( desc, handle, midi, 4096 );
+  master = 1.0f;
+  float high = render_energy( desc, handle, midi, 4096 );
+  if ( high <= low * 1.5f ) {
+    fprintf( stderr, "FAIL: master volume ineffective via LV2 (low=%g high=%g)\n", low, high );
+    desc->deactivate( handle );
+    desc->cleanup( handle );
+    return EXIT_FAILURE;
+  }
+
+  desc->deactivate( handle );
+  desc->cleanup( handle );
+
+  printf( "headless-lv2-test: PASS\n" );
+  return EXIT_SUCCESS;
+}

@@ -7,56 +7,6 @@ on:
   pull_request:
 
 jobs:
-  build-windows-msvc:
-    name: Windows x64 (MSVC)
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Configure
-        shell: cmd
-        run: |
-          cmake -S . -B build-msvc -G Ninja ^
-            -DCONNIE_BUILD_VST3=OFF ^
-            -DCONNIE_BUILD_LV2=ON ^
-            -DCONNIE_LV2_BUNDLE_DIR="%USERPROFILE%/.lv2/connie.lv2"
-
-      - name: Build
-        shell: cmd
-        run: cmake --build build-msvc
-
-      - name: Run headless tests
-        shell: cmd
-        run: cmake --build build-msvc --target test-headless
-
-      - name: Package LV2 bundle
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force -Path dist/connie.lv2 | Out-Null
-          Copy-Item "build-msvc/connie.dll" "dist/connie.lv2/connie.dll" -Force
-          Copy-Item "lv2/connie.lv2/connie.ttl" "dist/connie.lv2/connie.ttl" -Force
-          Copy-Item "build-msvc/connie.lv2/manifest.ttl" "dist/connie.lv2/manifest.ttl" -Force
-          Compress-Archive -Path "dist/connie.lv2" -DestinationPath "dist/connie-lv2-windows-x64.zip" -Force
-          Get-FileHash "dist/connie-lv2-windows-x64.zip" -Algorithm SHA256 | ForEach-Object {
-            "$($_.Hash.ToLower())  connie-lv2-windows-x64.zip" | Out-File -FilePath "dist/sha256sums.txt" -Encoding ascii
-          }
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: connie-lv2-windows-x64
-          path: |
-            dist/connie-lv2-windows-x64.zip
-            dist/sha256sums.txt
-
   build-linux-arm64:
     name: Linux ARM64 (Raspberry Pi target)
     runs-on: ubuntu-24.04-arm
