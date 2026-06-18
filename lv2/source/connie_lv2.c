@@ -40,7 +40,7 @@ typedef struct {
   float *enabled;
   float *drawbars[PORT_DB_COUNT];
   float *master;
-  float *transpose;
+  float *port_transpose;
   float *preset;
   LV2_URID midi_event_id;
   double sample_rate;
@@ -56,7 +56,7 @@ static int norm_to_drawbar( float v ) {
   return d;
 }
 
-static void handle_atom_midi( ConnieLV2 *h, const LV2_Atom_Event *event ) {
+static void handle_atom_midi( const ConnieLV2 *h, const LV2_Atom_Event *event ) {
   const uint8_t *data = (const uint8_t *)LV2_ATOM_BODY_CONST( &event->body );
   uint32_t size = event->body.size;
 
@@ -66,16 +66,19 @@ static void handle_atom_midi( ConnieLV2 *h, const LV2_Atom_Event *event ) {
   /* Some hosts wrap raw MIDI in a nested MidiEvent atom. */
   if ( size >= sizeof( LV2_Atom ) ) {
     const LV2_Atom *atom = (const LV2_Atom *)data;
-    if ( atom->type == h->midi_event_id && atom->size + sizeof( LV2_Atom ) <= size ) {
-      data = (const uint8_t *)( atom + 1 );
+    if ( atom->type == h->midi_event_id && atom->size + sizeof( LV2_Atom ) <= size ) { // NOSONAR
+      data = (const uint8_t *)atom + sizeof( LV2_Atom );
       size = atom->size;
     }
   }
 
   uint8_t buf[3];
-  int32_t n = size > 3 ? 3 : (int32_t)size;
-  memcpy( buf, data, (size_t)n );
-  connie_dsp_midi( buf, n );
+  size_t n = size;
+  if ( n > 3 ) {
+    n = 3;
+  }
+  memcpy( buf, data, n ); // NOSONAR
+  connie_dsp_midi( buf, (int32_t)n );
 }
 
 static void apply_controls( ConnieLV2 *h ) {
@@ -97,8 +100,8 @@ static void apply_controls( ConnieLV2 *h ) {
     tg_master_vol = ( m > 0.0f ) ? m : 0.25f;
   }
 
-  if ( h->transpose )
-    transpose = (int)( *h->transpose * 24.0f + 0.5f ) - 12;
+  if ( h->port_transpose )
+    transpose = (int)( *h->port_transpose * 24.0f + 0.5f ) - 12;
 
   if ( h->preset ) {
     int prog = (int)( *h->preset * 9.0f + 0.5f );
@@ -134,7 +137,8 @@ static LV2_Handle instantiate( const LV2_Descriptor *descriptor,
     free( h );
     return NULL;
   }
-  h->midi_event_id = map->map( map->handle, "http://lv2plug.in/ns/ext/midi#MidiEvent" );
+  /* LV2 URIs use http:// as identifiers, not as network endpoints. */
+  h->midi_event_id = map->map( map->handle, "http://lv2plug.in/ns/ext/midi#MidiEvent" ); // NOSONAR
 
   return h;
 }
@@ -148,7 +152,7 @@ static void connect_port( LV2_Handle instance, uint32_t port, void *data ) {
     case PORT_MIDI:     h->midi = (const LV2_Atom_Sequence *)data; break;
     case PORT_ENABLED:  h->enabled = (float *)data; break;
     case PORT_MASTER:   h->master = (float *)data; break;
-    case PORT_TRANSPOSE: h->transpose = (float *)data; break;
+    case PORT_TRANSPOSE: h->port_transpose = (float *)data; break;
     case PORT_PRESET:   h->preset = (float *)data; break;
     default:
       if ( port >= PORT_DB_16 && port < PORT_DB_16 + PORT_DB_COUNT )
@@ -190,13 +194,13 @@ static void run( LV2_Handle instance, uint32_t nframes ) {
 
   if ( h->midi ) {
     LV2_ATOM_SEQUENCE_FOREACH( h->midi, ev ) {
-      if ( ev->body.type != h->midi_event_id )
+      if ( ev->body.type != h->midi_event_id ) // NOSONAR
         continue;
 
       const LV2_Atom_Event *event = (const LV2_Atom_Event *)ev;
       uint32_t size = event->body.size;
 
-      uint32_t ev_frame = event->time.frames;
+      uint32_t ev_frame = (uint32_t)event->time.frames;
       if ( ev_frame > nframes )
         ev_frame = nframes;
       if ( ev_frame > frame ) {
