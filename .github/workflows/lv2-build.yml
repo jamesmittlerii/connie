@@ -70,9 +70,9 @@ jobs:
           test -f "$bund/manifest.ttl"
           test -f "$bund/connie.ttl"
           test -f "$bund/connie.so"
-          if grep -q '@' "$bund/manifest.ttl"; then
-            echo "ERROR: manifest.ttl still has unexpanded @ placeholders:" >&2
-            cat "$bund/manifest.ttl" >&2
+          if grep -E '@[A-Za-z0-9_]+@' "$bund/manifest.ttl"; then
+            echo "ERROR: manifest.ttl still has unexpanded CMake @placeholders@:" >&2
+            grep -E '@[A-Za-z0-9_]+@' "$bund/manifest.ttl" >&2
             exit 1
           fi
           nm -D "$bund/connie.so" | grep -q ' lv2_descriptor'
