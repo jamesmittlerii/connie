@@ -510,6 +510,7 @@ void ui_loop( const char *name ) {
       case 1:
       case 3:
         ui_status = 0;
+        /* fall through */
       case 2:
         {
           FILE *cfg = fopen( ".connie_session", "w" );
@@ -533,6 +534,7 @@ void ui_loop( const char *name ) {
           fclose( cfg );
           printf( "ui_status = %d, session_dir = %s\n", ui_status, session_dir );
         }
+        /* fall through */
       case 0:
         break;
     }
