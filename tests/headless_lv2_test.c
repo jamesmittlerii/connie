@@ -69,7 +69,7 @@ static int append_note_on( LV2_Atom_Sequence *seq,
   ev->body.type   = midi_urid;
   ev->body.size   = 3;
 
-  uint8_t *midi = (uint8_t *)LV2_ATOM_BODY( &ev->body );
+  uint8_t *midi = (uint8_t *)LV2_ATOM_BODY( &ev->body ); /* NOSONAR storage[64] holds event + payload */
   midi[0]       = 0x90;
   midi[1]       = note;
   midi[2]       = velocity;

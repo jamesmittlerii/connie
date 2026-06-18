@@ -56,8 +56,8 @@ static int norm_to_drawbar( float v ) {
   return d;
 }
 
-static void handle_atom_midi( ConnieLV2 *h, const LV2_Atom_Event *event ) {
-  const uint8_t *data = (const uint8_t *)LV2_ATOM_BODY_CONST( &event->body );
+static void handle_atom_midi( const ConnieLV2 *h, const LV2_Atom_Event *event ) {
+  const uint8_t *data = (const uint8_t *)LV2_ATOM_BODY_CONST( &event->body ); /* NOSONAR lv2 atom payload */
   uint32_t size = event->body.size;
 
   if ( event->body.type != h->midi_event_id || !data || size < 1 )
@@ -67,14 +67,14 @@ static void handle_atom_midi( ConnieLV2 *h, const LV2_Atom_Event *event ) {
   if ( size >= sizeof( LV2_Atom ) ) {
     const LV2_Atom *atom = (const LV2_Atom *)data;
     if ( atom->type == h->midi_event_id && atom->size + sizeof( LV2_Atom ) <= size ) {
-      data = (const uint8_t *)( atom + 1 );
+      data = (const uint8_t *)( atom + 1 ); /* NOSONAR payload follows LV2_Atom header */
       size = atom->size;
     }
   }
 
   uint8_t buf[3];
   int32_t n = size > 3 ? 3 : (int32_t)size;
-  memcpy( buf, data, (size_t)n );
+  memcpy( buf, data, (size_t)n ); /* NOSONAR n = min(size, 3), size validated above */
   connie_dsp_midi( buf, n );
 }
 
