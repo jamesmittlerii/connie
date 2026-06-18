@@ -76,7 +76,7 @@ jobs:
             exit 1
           fi
           nm -D "$bund/connie.so" | grep -q ' lv2_descriptor'
-          LV2_PATH=build-arm64 lilv-plugin-list | grep -F 'https://ho-ro.net/connie/lv2'
+          LV2_PATH=build-arm64 lv2ls | grep -F 'https://ho-ro.net/connie/lv2'
           echo "OK: LV2 bundle is discoverable by lilv"
 
       - name: Package LV2 bundle
