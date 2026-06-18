@@ -57,12 +57,19 @@ static int norm_to_drawbar( float v ) {
   return d;
 }
 
+static uint32_t read_u32_le( const uint8_t *p ) {
+  return (uint32_t)p[0]
+       | ( (uint32_t)p[1] << 8 )
+       | ( (uint32_t)p[2] << 16 )
+       | ( (uint32_t)p[3] << 24 );
+}
+
 static LV2_URID atom_type( const uint8_t *header ) {
-  return ((const LV2_Atom *)header)->type;
+  return read_u32_le( header );
 }
 
 static uint32_t atom_payload_size( const uint8_t *header ) {
-  return ((const LV2_Atom *)header)->size;
+  return read_u32_le( header + 4 );
 }
 
 static int32_t copy_midi_message( uint8_t *dst, const uint8_t *src, uint32_t src_size ) {
