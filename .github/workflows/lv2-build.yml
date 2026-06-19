@@ -188,6 +188,7 @@ jobs:
           merge-multiple: true
 
       - name: Publish to apt repository
+        shell: bash
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
           APTREPO_PUSH_TOKEN: ${{ secrets.APTREPO_PUSH_TOKEN }}
@@ -234,6 +235,7 @@ jobs:
           fi
 
       - name: Commit version bump and tag
+        shell: bash
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
