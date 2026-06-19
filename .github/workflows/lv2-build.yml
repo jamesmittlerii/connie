@@ -164,8 +164,12 @@ jobs:
       - prepare-release
       - build-deb
     runs-on: ubuntu-24.04
+    container: debian:bookworm
 
     steps:
+      - name: Install packaging tools
+        run: apt-get update && apt-get install -y --no-install-recommends git reprepro ca-certificates
+
       - name: Checkout
         uses: actions/checkout@v5
         with:
@@ -194,9 +198,6 @@ jobs:
             echo "Create a fine-grained PAT with contents write access to ${APTREPO_SLUG}." >&2
             exit 1
           fi
-
-          apt-get update
-          apt-get install -y reprepro git
 
           git clone "https://x-access-token:${APTREPO_PUSH_TOKEN}@github.com/${APTREPO_SLUG}.git" aptrepo
           cd aptrepo
