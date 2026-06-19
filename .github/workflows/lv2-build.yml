@@ -158,8 +158,8 @@ jobs:
           name: deb-${{ matrix.arch }}
           path: dist/*.deb
 
-  finalize-release:
-    name: Tag and publish
+  publish-apt:
+    name: Publish APT repo
     needs:
       - prepare-release
       - build-deb
@@ -172,13 +172,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Download release metadata
-        uses: actions/download-artifact@v7
-        with:
-          name: release-metadata
 
       - name: Download built packages
         uses: actions/download-artifact@v7
@@ -200,8 +193,10 @@ jobs:
             exit 1
           fi
 
-          git clone "https://x-access-token:${APTREPO_PUSH_TOKEN}@github.com/${APTREPO_SLUG}.git" aptrepo
-          cd aptrepo
+          work="${GITHUB_WORKSPACE}"
+          rm -rf "${work}/aptrepo"
+          git clone "https://x-access-token:${APTREPO_PUSH_TOKEN}@github.com/${APTREPO_SLUG}.git" "${work}/aptrepo"
+          cd "${work}/aptrepo"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -213,10 +208,16 @@ jobs:
           fi
 
           mkdir -p conf
-          cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
-          cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/.gitignore" .gitignore
+          cp "${work}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
+          cp "${work}/packaging/aptrepo-bootstrap/.gitignore" .gitignore
 
-          for deb in "${GITHUB_WORKSPACE}"/debs/lv2-connie_*.deb; do
+          shopt -s nullglob
+          debs=("${work}"/debs/lv2-connie_*.deb)
+          if [ ${#debs[@]} -eq 0 ]; then
+            echo "ERROR: no lv2-connie .deb files found in ${work}/debs" >&2
+            exit 1
+          fi
+          for deb in "${debs[@]}"; do
             echo "Adding ${deb}"
             reprepro -b . includedeb "${APT_CODENAME}" "${deb}"
           done
@@ -230,12 +231,40 @@ jobs:
             git push origin gh-pages
           fi
 
+  release-tag:
+    name: Tag and GitHub release
+    needs:
+      - prepare-release
+      - build-deb
+      - publish-apt
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download release metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: release-metadata
+
+      - name: Download built packages
+        uses: actions/download-artifact@v7
+        with:
+          pattern: deb-*
+          path: debs
+          merge-multiple: true
+
       - name: Commit version bump and tag
         shell: bash
         env:
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          unset GIT_DIR GIT_WORK_TREE
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION debian/changelog
@@ -245,8 +274,6 @@ jobs:
           git push origin "v${VERSION}"
 
       - name: Upload release assets
-        env:
-          VERSION: ${{ needs.prepare-release.outputs.version }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare-release.outputs.version }}
