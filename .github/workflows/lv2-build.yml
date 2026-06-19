@@ -210,6 +210,9 @@ jobs:
           mkdir -p conf
           cp "${work}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
           cp "${work}/packaging/aptrepo-bootstrap/.gitignore" .gitignore
+          cp "${work}/packaging/aptrepo-bootstrap/.nojekyll" .nojekyll
+          # Never ignore pool debs (a stale *.deb rule breaks apt publishing).
+          sed -i '/^\*\.deb$/d' .gitignore
 
           shopt -s nullglob
           debs=("${work}"/debs/lv2-connie_*.deb)
@@ -223,7 +226,13 @@ jobs:
           done
 
           rm -rf db
+          ls -laR pool/
           git add -A
+          git add -f pool/
+          if ! git diff --staged --name-only | grep -qE '^pool/.*\.deb$'; then
+            echo "ERROR: no .deb files staged under pool/ (check .gitignore)" >&2
+            exit 1
+          fi
           if git diff --staged --quiet; then
             echo "No aptrepo changes to publish"
           else
