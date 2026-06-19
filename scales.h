@@ -147,9 +147,9 @@ const float scale_meanquart[12] =
 // Werckmeister temperament III (Andreas Werckmeister, 1681)
 // http://en.wikipedia.org/wiki/Werckmeister_temperament
 
-#define R2 1.414213562
-#define RR2 1.189207115
-#define RR8 1.681792831
+#define R2 1.414213562f
+#define RR2 1.189207115f
+#define RR8 1.681792831f
 const float scale_werckmeister3[12] = 
 {
     1.f,
@@ -175,9 +175,9 @@ const float scale_werckmeister3[12] =
 // http://groenewald-berlin.de/ttg/TTG_T093.html
 // http://groenewald-berlin.de/tabellen/TAB-093.html
 
-#define R5 2.236067977
-#define RR5 1.495348781
-#define RR125 3.343701525
+#define R5 2.236067977f
+#define RR5 1.495348781f
+#define RR125 3.343701525f
 const float scale_kirnberger3[12] = 
 {
     1.0f,
@@ -199,10 +199,12 @@ const float scale_kirnberger3[12] =
 
 
 
-struct temper {
+typedef struct {
     const char *label;
     const float *f_ratio;
-} scales[] =
+} temper_t;
+
+const temper_t scales[] =
 {
     { "Hammond Gears",    scale_hammond_gears },
     { "Equally Tempered", scale_equaltemp },
@@ -213,7 +215,7 @@ struct temper {
     { "Kirnberger III",   scale_kirnberger3 },
 };
 
-const int NSCALES = sizeof( scales ) / sizeof( struct temper );
+const int NSCALES = sizeof( scales ) / sizeof( scales[0] );
 
 #endif
 

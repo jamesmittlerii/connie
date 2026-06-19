@@ -57,24 +57,28 @@ static void init_sequence( LV2_Atom_Sequence *seq, LV2_URID seq_urid ) {
 }
 
 static int append_note_on( LV2_Atom_Sequence *seq,
-                           uint32_t            capacity,
-                           LV2_URID            midi_urid,
-                           uint32_t            frame,
-                           uint8_t             note,
-                           uint8_t             velocity ) {
-  uint8_t storage[64];
-  LV2_Atom_Event *ev = (LV2_Atom_Event *)storage;
+  uint32_t            capacity,
+  LV2_URID            midi_urid,
+  uint32_t            frame,
+  uint8_t             note,
+  uint8_t             velocity ) {
+  
+// Define a localized struct for the event + payload
+struct {
+LV2_Atom_Event event;
+uint8_t        msg[3];
+} midi_data;
 
-  ev->time.frames = (int64_t)frame;
-  ev->body.type   = midi_urid;
-  ev->body.size   = 3;
+midi_data.event.time.frames = (int64_t)frame;
+midi_data.event.body.type   = midi_urid;
+midi_data.event.body.size   = 3;
 
-  uint8_t *midi = (uint8_t *)LV2_ATOM_BODY( &ev->body );
-  midi[0]       = 0x90;
-  midi[1]       = note;
-  midi[2]       = velocity;
+// Write directly to the explicitly sized array
+midi_data.msg[0] = 0x90;
+midi_data.msg[1] = note;
+midi_data.msg[2] = velocity;
 
-  return lv2_atom_sequence_append_event( seq, capacity, ev ) ? 0 : -1;
+return lv2_atom_sequence_append_event( seq, capacity, &midi_data.event ) ? 0 : -1;
 }
 
 static float render_energy( const LV2_Descriptor *desc,
