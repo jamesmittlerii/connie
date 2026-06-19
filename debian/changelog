@@ -1,24 +1,5 @@
-connie (0.4.4) experimental; urgency=low
-  * resurrected the project after 10 years sleep
-    it still compiles and works under debian buster (stable) without any changes
-  * fixed  "connie_main.c:658:29: warning: iteration 120 invokes undefined behavior..."
+connie (0.5.0-1) bookworm; urgency=medium
 
- -- Martin Homuth-Rosemann <linuxaudio@cryptomys.de>  Fri, 30 Oct 2020 15:06:07 +0100
+  * LV2 plugin packaging for Debian (CMake build).
 
-connie (0.4.3-rc6) experimental; urgency=low
-  * prepared for jack-session 
-  * JCRev type reverb uses less cpu
-  * default hammond gear ratio intonation
-  * opt. intonations inspired by aeolus
-  * colored "gui"
-  * some DSP optimizations, better denormal handling
-  * smoother attack/decay envelopes
-  * percussion triggered by first keypress only
-
- -- Martin Homuth-Rosemann <homuth-rosemann@cryptomys.de>  Tue, 3 Aug 2010 21:39:00 +0200
-
-connie (0.4.2) experimental; urgency=low
-
-  * Second organ model, i18n, source code modularization - see Changelog 
-
- -- Martin Homuth-Rosemann <homuth-rosemann@cryptomys.de>  Fri, 26 Jun 2009 19:51:40 +0200
+ -- James Mittler <jamesmittlerii@users.noreply.github.com>  Thu, 18 Jun 2026 12:00:00 +0000

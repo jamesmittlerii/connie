@@ -1,99 +1,256 @@
-name: Build LV2 Bundles
+name: LV2 build and release
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
 
+concurrency:
+  group: lv2-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  APTREPO_SLUG: jamesmittlerii/aptrepo
+  APT_CODENAME: bookworm
+
 jobs:
-  build-linux-arm64:
-    name: Linux ARM64 (Raspberry Pi target)
-    runs-on: ubuntu-24.04-arm
-    # Match Raspberry Pi OS / Debian Bookworm glibc (2.36). Ubuntu 24.04 needs GLIBC_2.38+.
+  test:
+    name: Test (${{ matrix.arch }})
+    runs-on: ${{ matrix.runs-on }}
     container: debian:bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs-on: ubuntu-24.04
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Install build tools
-        run: apt-get update && apt-get install -y cmake ninja-build build-essential binutils bash zip
+        run: apt-get update && apt-get install -y cmake ninja-build build-essential binutils bash
 
       - name: Configure
         run: |
-          cmake -S . -B build-arm64 -G Ninja \
+          cmake -S . -B build -G Ninja \
             -DCONNIE_BUILD_VST3=OFF \
             -DCONNIE_BUILD_LV2=ON \
             -DCONNIE_LV2_BUNDLE_DIR="$HOME/.lv2/connie.lv2"
 
       - name: Build
-        run: cmake --build build-arm64
+        run: cmake --build build
 
       - name: Verify Pi-compatible linkage
+        if: matrix.arch == 'arm64'
         shell: bash
         run: |
           set -euo pipefail
-          so=build-arm64/connie.so
-
-          if [ ! -f "$so" ]; then
-            echo "ERROR: $so not found" >&2
-            find build-arm64 -name 'connie.so' -o -name '*.so' 2>/dev/null >&2
-            exit 1
-          fi
-
+          so=build/connie.so
+          test -f "$so"
           if ldd "$so" | grep -q 'libstdc++'; then
             echo "ERROR: $so still dynamically links libstdc++:" >&2
             ldd "$so" >&2
             exit 1
           fi
-          echo "OK: no dynamic libstdc++ dependency"
-
           max_glibc=$(objdump -T "$so" | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
           target_glibc="2.36"
-          echo "Max GLIBC symbol version required: ${max_glibc:-none}"
           if [ -n "$max_glibc" ] && [ "$(printf '%s\n' "$max_glibc" "$target_glibc" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" != "$max_glibc" ]; then
-            echo "ERROR: $so requires GLIBC > $target_glibc (too new for Raspberry Pi OS Bookworm)" >&2
-            objdump -T "$so" | grep GLIBC | sort -u >&2
+            echo "ERROR: $so requires GLIBC > $target_glibc" >&2
             exit 1
           fi
-          echo "OK: GLIBC requirement is Pi-compatible (<= $target_glibc)"
 
       - name: Run headless test
-        run: cmake --build build-arm64 --target test-headless
+        run: cmake --build build --target test-headless
 
       - name: Verify LV2 bundle
         shell: bash
         run: |
           set -euo pipefail
-          bund=build-arm64/connie.lv2
+          bund=build/connie.lv2
           test -f "$bund/manifest.ttl"
           test -f "$bund/connie.ttl"
           test -f "$bund/connie.so"
           if grep -E '@[A-Za-z0-9_]+@' "$bund/manifest.ttl"; then
-            echo "ERROR: manifest.ttl still has unexpanded CMake @placeholders@:" >&2
-            grep -E '@[A-Za-z0-9_]+@' "$bund/manifest.ttl" >&2
+            echo "ERROR: manifest.ttl still has unexpanded CMake placeholders" >&2
             exit 1
           fi
           nm -D "$bund/connie.so" | grep -q ' lv2_descriptor'
-          echo "OK: LV2 bundle layout and exports verified"
 
-      - name: Package LV2 bundle
-        shell: bash
+  prepare-release:
+    name: Bump version
+    needs: test
+    if: >-
+      github.event_name == 'push'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Bump semver
+        id: bump
         run: |
-          set -euo pipefail
-          bund=build-arm64/connie.lv2
-          mkdir -p dist/connie.lv2
-          cp "$bund/connie.so" dist/connie.lv2/
-          cp "$bund/connie.ttl" dist/connie.lv2/
-          cp "$bund/manifest.ttl" dist/connie.lv2/
-          (cd dist && zip -r connie-lv2-linux-arm64.zip connie.lv2)
-          (cd dist && sha256sum connie-lv2-linux-arm64.zip > sha256sums.txt)
+          chmod +x scripts/bump-version.sh scripts/update-debian-changelog.sh
+          new="$(./scripts/bump-version.sh patch)"
+          ./scripts/update-debian-changelog.sh "${new}"
+          echo "version=${new}" >> "${GITHUB_OUTPUT}"
+          echo "Bumped to ${new}"
 
-      - name: Upload artifact
+      - name: Upload release metadata
         uses: actions/upload-artifact@v6
         with:
-          name: connie-lv2-linux-arm64
+          name: release-metadata
           path: |
-            dist/connie-lv2-linux-arm64.zip
-            dist/sha256sums.txt
+            VERSION
+            debian/changelog
+
+  build-deb:
+    name: Build .deb (${{ matrix.arch }})
+    needs: prepare-release
+    runs-on: ${{ matrix.runs-on }}
+    container: debian:bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs-on: ubuntu-24.04
+          - arch: arm64
+            runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download release metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: release-metadata
+
+      - name: Install packaging tools
+        run: |
+          apt-get update
+          apt-get install -y devscripts debhelper cmake ninja-build pkg-config build-essential
+
+      - name: Build Debian package
+        run: |
+          export DEB_BUILD_OPTIONS=nocheck
+          dpkg-buildpackage -us -uc -b -d
+          mkdir -p dist
+          mv ../*.deb dist/
+          ls -la dist/
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v6
+        with:
+          name: deb-${{ matrix.arch }}
+          path: dist/*.deb
+
+  finalize-release:
+    name: Tag and publish
+    needs:
+      - prepare-release
+      - build-deb
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download release metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: release-metadata
+
+      - name: Download built packages
+        uses: actions/download-artifact@v7
+        with:
+          pattern: deb-*
+          path: debs
+          merge-multiple: true
+
+      - name: Publish to apt repository
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          APTREPO_PUSH_TOKEN: ${{ secrets.APTREPO_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APTREPO_PUSH_TOKEN:-}" ]; then
+            echo "ERROR: APTREPO_PUSH_TOKEN secret is not set on this repository." >&2
+            echo "Create a fine-grained PAT with contents write access to ${APTREPO_SLUG}." >&2
+            exit 1
+          fi
+
+          apt-get update
+          apt-get install -y reprepro git
+
+          git clone "https://x-access-token:${APTREPO_PUSH_TOKEN}@github.com/${APTREPO_SLUG}.git" aptrepo
+          cd aptrepo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+            mkdir -p conf
+            cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
+            cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/.gitignore" .gitignore
+          fi
+
+          if [ ! -f conf/distributions ]; then
+            mkdir -p conf
+            cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
+          fi
+
+          for deb in "${GITHUB_WORKSPACE}"/debs/*.deb; do
+            echo "Adding ${deb}"
+            reprepro -b . includedeb "${APT_CODENAME}" "${deb}"
+          done
+
+          rm -rf db
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No aptrepo changes to publish"
+          else
+            git commit -m "lv2-connie ${VERSION}"
+            git push origin gh-pages
+          fi
+
+      - name: Commit version bump and tag
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION debian/changelog
+          git commit -m "chore(release): v${VERSION} [skip ci]"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin HEAD
+          git push origin "v${VERSION}"
+
+      - name: Upload release assets
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.prepare-release.outputs.version }}
+          name: v${{ needs.prepare-release.outputs.version }}
+          files: debs/*.deb
+          generate_release_notes: true

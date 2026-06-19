@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" CONNIE_VERSION_RAW)
+    string(STRIP "${CONNIE_VERSION_RAW}" CONNIE_VERSION)
+else()
+    set(CONNIE_VERSION "0.0.0")
+endif()
+
 project(connie
-    VERSION 0.5.0
+    VERSION ${CONNIE_VERSION}
     DESCRIPTION "Vox Continental organ simulator"
     LANGUAGES C CXX
 )

@@ -1,16 +1,22 @@
 Source: connie
 Section: sound
 Priority: optional
-Maintainer: Martin Homuth-Rosemann <linuxaudio@cryptomys.de>
-Build-Depends: debhelper (>= 10),libjack-jackd2-dev,libconfuse-dev
-Standards-Version: 4.4.1
-Homepage: https://github.com/Ho-Ro/connie
+Maintainer: James Mittler <jamesmittlerii@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.20),
+               ninja-build,
+               pkg-config
+Standards-Version: 4.6.2
+Homepage: https://github.com/jamesmittlerii/connie
+Rules-Requires-Root: no
+Vcs-Browser: https://github.com/jamesmittlerii/connie
+Vcs-Git: https://github.com/jamesmittlerii/connie.git
 
-Package: connie
+Package: lv2-connie
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Electronic organ like e.g. Vox Continental with JACK interface
- Connie is an electronic organ program with JACK midi in and JACK audio out.
- The program simulates the signal flow of a typical analog polyphonic organ.
- Besides sounding nice the source code is intended as a toolbox for writing
- and testing own signal processing solutions.
+Provides: lv2-plugin
+Depends: ${misc:Depends}
+Description: Vox Continental organ LV2 instrument plugin
+ Connie simulates the signal path of a classic analog polyphonic organ
+ such as the Vox Continental. This package installs the LV2 plugin bundle
+ for use in compatible hosts (Ardour, Carla, REAPER, etc.).

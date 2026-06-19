@@ -1,0 +1,8 @@
+Origin: James Mittler LV2
+Label: James Mittler LV2
+Suite: stable
+Codename: bookworm
+Architectures: amd64 arm64
+Components: main
+Description: LV2 plugins
+SignWith: !

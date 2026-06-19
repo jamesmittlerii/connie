@@ -1,2 +1,0 @@
-?package(connie):needs="text" section="Applications/Sound"\
-  title="connie" command="/usr/bin/connie"
