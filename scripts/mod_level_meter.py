@@ -55,7 +55,7 @@ def db_to_bar(db: float, min_db: float, max_db: float, width: int) -> str:
         return "?" * width
     span = max_db - min_db
     pos = (db - min_db) / span
-    pos = 0.0 if pos < 0.0 else 1.0 if pos > 1.0 else pos
+    pos = max(0.0, min(1.0, pos))
     filled = int(round(pos * width))
     return "#" * filled + "-" * (width - filled)
 
@@ -73,10 +73,7 @@ class PeakHold:
     peak_at: float = field(default=0.0)
 
     def update(self, db: float, now: float) -> float:
-        if db >= self.peak_db:
-            self.peak_db = db
-            self.peak_at = now
-        elif now - self.peak_at >= self.hold_sec:
+        if db >= self.peak_db or now - self.peak_at >= self.hold_sec:
             self.peak_db = db
             self.peak_at = now
         return self.peak_db
