@@ -5,4 +5,3 @@ Codename: bookworm
 Architectures: amd64 arm64
 Components: main
 Description: LV2 plugins
-SignWith: !

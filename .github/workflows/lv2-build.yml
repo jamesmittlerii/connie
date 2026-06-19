@@ -146,10 +146,10 @@ jobs:
 
       - name: Build Debian package
         run: |
-          export DEB_BUILD_OPTIONS=nocheck
+          export DEB_BUILD_OPTIONS="nocheck noautodbgsym"
           dpkg-buildpackage -us -uc -b -d
           mkdir -p dist
-          mv ../*.deb dist/
+          mv ../lv2-connie_*.deb dist/
           ls -la dist/
 
       - name: Upload .deb
@@ -210,17 +210,13 @@ jobs:
           else
             git checkout --orphan gh-pages
             git rm -rf . 2>/dev/null || true
-            mkdir -p conf
-            cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
-            cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/.gitignore" .gitignore
           fi
 
-          if [ ! -f conf/distributions ]; then
-            mkdir -p conf
-            cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
-          fi
+          mkdir -p conf
+          cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/conf/distributions" conf/distributions
+          cp "${GITHUB_WORKSPACE}/packaging/aptrepo-bootstrap/.gitignore" .gitignore
 
-          for deb in "${GITHUB_WORKSPACE}"/debs/*.deb; do
+          for deb in "${GITHUB_WORKSPACE}"/debs/lv2-connie_*.deb; do
             echo "Adding ${deb}"
             reprepro -b . includedeb "${APT_CODENAME}" "${deb}"
           done
@@ -255,5 +251,5 @@ jobs:
         with:
           tag_name: v${{ needs.prepare-release.outputs.version }}
           name: v${{ needs.prepare-release.outputs.version }}
-          files: debs/*.deb
+          files: debs/lv2-connie_*.deb
           generate_release_notes: true
