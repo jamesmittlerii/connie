@@ -41,6 +41,7 @@ add_library(connie_dsp STATIC ${CONNIE_DSP_SOURCES} ${CONNIE_DSP_HEADERS})
 target_include_directories(connie_dsp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if(NOT MSVC)
     target_link_libraries(connie_dsp PUBLIC m)
+    set_target_properties(connie_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
 if(MSVC)
