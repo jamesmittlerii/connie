@@ -225,10 +225,23 @@ jobs:
             reprepro -b . includedeb "${APT_CODENAME}" "${deb}"
           done
 
-          rm -rf db
+          # reprepro db/ is not in git; rebuild dists/ from the full pool so
+          # packages from other plugin repos remain in the apt index.
+          rm -rf db dists
+          shopt -s nullglob
+          pool_debs=(pool/main/*/*/*.deb)
+          if [ ${#pool_debs[@]} -eq 0 ]; then
+            echo "ERROR: no .deb files under pool/" >&2
+            exit 1
+          fi
+          for deb in "${pool_debs[@]}"; do
+            echo "Indexing ${deb}"
+            reprepro -b . includedeb "${APT_CODENAME}" "${deb}"
+          done
+
           ls -laR pool/
           git add -A
-          git add -f pool/
+          git add -f pool/ dists/
           if ! git diff --staged --name-only | grep -qE '^pool/.*\.deb$'; then
             echo "ERROR: no .deb files staged under pool/ (check .gitignore)" >&2
             exit 1
