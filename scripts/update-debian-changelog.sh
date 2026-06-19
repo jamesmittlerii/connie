@@ -11,7 +11,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 upstream="$1"
 debian_rev="${2:-1}"
 changelog="${root}/debian/changelog"
-maintainer="${DEBFULLNAME:-James Mittler} <${DEBEMAIL:-jamesmittlerii@users.noreply.github.com}>"
+maintainer="${DEBFULLNAME:-James Mittler} <${DEBEMAIL:-jamesmittlerii@my.smccd.edu}>"
 date="$(date -R)"
 full_version="${upstream}-${debian_rev}"
 
