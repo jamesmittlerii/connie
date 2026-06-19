@@ -1,4 +1,4 @@
-connie (0.5.0-1) bookworm; urgency=medium
+connie (0.5.0) bookworm; urgency=medium
 
   * LV2 plugin packaging for Debian (CMake build).
 
