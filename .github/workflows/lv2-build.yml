@@ -82,7 +82,10 @@ jobs:
             echo "ERROR: manifest.ttl still has unexpanded CMake placeholders" >&2
             exit 1
           fi
-          nm -D "$bund/connie.so" | grep -q ' lv2_descriptor'
+          if ! nm -D "$bund/connie.so" | grep ' lv2_descriptor' >/dev/null; then
+            echo "ERROR: lv2_descriptor not exported" >&2
+            exit 1
+          fi
 
   prepare-release:
     name: Bump version
