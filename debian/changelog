@@ -1,3 +1,9 @@
+connie (0.5.2) bookworm; urgency=medium
+
+  * Automated LV2 release 0.5.2.
+
+ -- James Mittler <jamesmittlerii@my.smccd.edu>  Fri, 19 Jun 2026 14:12:07 +0000
+
 connie (0.5.1) bookworm; urgency=medium
 
   * Automated LV2 release 0.5.1.
