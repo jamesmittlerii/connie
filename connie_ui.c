@@ -26,18 +26,53 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include <termios.h>
 #include <time.h>
 #include <signal.h>
+#ifndef _WIN32
+#include <unistd.h>
+#include <termios.h>
 #include <sys/select.h>
+#endif
 
 #include "connie.h"
 #include "connie_tg.h"
 #include "connie_ui.h"
+
+#define ANSI_ESC "\033"
+
+static FILE *open_write_file( const char *path )
+{
+  FILE *fp = NULL;
+#ifdef _MSC_VER
+  if ( fopen_s( &fp, path, "w" ) != 0 )
+    return NULL;
+#else
+  fp = fopen( path, "w" );
+#endif
+  return fp;
+}
+
+static char *ui_strdup( const char *s )
+{
+#ifdef _MSC_VER
+  return _strdup( s );
+#else
+  return strdup( s );
+#endif
+}
+
+static void ui_sleep_ms( unsigned int ms )
+{
+#ifndef _WIN32
+  struct timespec ts = { (time_t)( ms / 1000u ), (long)( ( ms % 1000u ) * 1000000L ) };
+  nanosleep( &ts, NULL );
+#else
+  (void)ms;
+#endif
+}
 
 
 // **********************************************************
@@ -149,95 +184,80 @@ static int ui_presets = PRESETS_0;
 
 
 static void ui_set_volumes_0( void ) {
-  tg_vol[0]     = ui_draw[0] * ui_draw[0] / 64.0;
-  tg_vol[2]     = ui_draw[1] * ui_draw[1] / 64.0;
-  tg_vol[3]     = ui_draw[2] * ui_draw[2] / 64.0;
-  // the mixture draw controls four stops
-  tg_vol[4]     =
-  tg_vol[5]     =
-  tg_vol[6]     =
-  tg_vol[8]     = ui_draw[3] * ui_draw[3] / 64.0;
-  // three voices
-  tg_vol_fl     = ui_draw[4] * ui_draw[4] / 64.0;
-  tg_vol_rd     = ui_draw[5] * ui_draw[5] / 64.0;
-  tg_vol_sh     = ui_draw[6] * ui_draw[6] / 96.0;
-  // three effects
-  tg_percussion = ui_draw[7] / 8.0;
-  tg_vibrato    = ui_draw[8] / 8.0;
-  tg_reverb     = ui_draw[9] * ui_draw[9] / 64.0;
+  tg_vol[0]     = (float)ui_draw[0] * (float)ui_draw[0] / 64.0f;
+  tg_vol[2]     = (float)ui_draw[1] * (float)ui_draw[1] / 64.0f;
+  tg_vol[3]     = (float)ui_draw[2] * (float)ui_draw[2] / 64.0f;
+  {
+    const float mixture = (float)ui_draw[3] * (float)ui_draw[3] / 64.0f;
+    tg_vol[4] = mixture;
+    tg_vol[5] = mixture;
+    tg_vol[6] = mixture;
+    tg_vol[8] = mixture;
+  }
+  tg_vol_fl     = (float)ui_draw[4] * (float)ui_draw[4] / 64.0f;
+  tg_vol_rd     = (float)ui_draw[5] * (float)ui_draw[5] / 64.0f;
+  tg_vol_sh     = (float)ui_draw[6] * (float)ui_draw[6] / 96.0f;
+  tg_percussion = (float)ui_draw[7] / 8.0f;
+  tg_vibrato    = (float)ui_draw[8] / 8.0f;
+  tg_reverb     = (float)ui_draw[9] * (float)ui_draw[9] / 64.0f;
 }
 
 static void ui_set_volumes_1( void ) {
-  // simple relation: one draw -> one stop
   for ( int i = 0; i < STOPS_1; i++ ) {
-    tg_vol[i] = ui_draw[i] * ui_draw[i] / 64.0;
+    tg_vol[i] = (float)ui_draw[i] * (float)ui_draw[i] / 64.0f;
   }
-  // three effects
-  tg_percussion = ui_draw[STOPS_1] / 8.0;
-  tg_vibrato    = ui_draw[STOPS_1+1] / 8.0;
-  tg_reverb     = ui_draw[STOPS_1+2] * ui_draw[STOPS_1+2] / 64.0;
-  // only sine waves
-  tg_vol_fl     = 1.0;
-  tg_vol_rd     = 0.0;
-  tg_vol_sh     = 0.0;
+  tg_percussion = (float)ui_draw[STOPS_1] / 8.0f;
+  tg_vibrato    = (float)ui_draw[STOPS_1 + 1] / 8.0f;
+  tg_reverb     = (float)ui_draw[STOPS_1 + 2] * (float)ui_draw[STOPS_1 + 2] / 64.0f;
+  tg_vol_fl     = 1.0f;
+  tg_vol_rd     = 0.0f;
+  tg_vol_sh     = 0.0f;
 }
 
 
-static void ( *ui_set_volumes)() = ui_set_volumes_0;
+static void ( *ui_set_volumes )( void ) = ui_set_volumes_0;
 
 
 // select the proper functions and constants for the models
 static void ui_set_model( model_t model ) {
-  switch ( model ) {
-    default:
-    case CONNIE:
-      ui_draw = ui_draw_0;
-      ui_ui = ui_ui_0;
-      ui_drawbars = DRAWBARS_0;
-      ui_colors = ui_colors_0;
-      ui_stops = STOPS_0;
-      ui_presets = PRESETS_0;
-      ui_set_volumes = ui_set_volumes_0;
-      ui_connie_model = CONNIE;
-      break;
-    case HAMMOND:
-      ui_draw = ui_draw_1;
-      ui_ui = ui_ui_1;
-      ui_drawbars = DRAWBARS_1;
-      ui_colors = ui_colors_1;
-      ui_stops = STOPS_1;
-      ui_presets = PRESETS_1;
-      ui_set_volumes = ui_set_volumes_1;
-      ui_connie_model = HAMMOND;
-      break;
+  if ( model == HAMMOND ) {
+    ui_draw = ui_draw_1;
+    ui_ui = ui_ui_1;
+    ui_drawbars = DRAWBARS_1;
+    ui_colors = ui_colors_1;
+    ui_stops = STOPS_1;
+    ui_presets = PRESETS_1;
+    ui_set_volumes = ui_set_volumes_1;
+    ui_connie_model = HAMMOND;
+  } else {
+    ui_draw = ui_draw_0;
+    ui_ui = ui_ui_0;
+    ui_drawbars = DRAWBARS_0;
+    ui_colors = ui_colors_0;
+    ui_stops = STOPS_0;
+    ui_presets = PRESETS_0;
+    ui_set_volumes = ui_set_volumes_0;
+    ui_connie_model = CONNIE;
   }
 }
 
 
 // set drawbars according to presets
 int ui_set_program( int prog ) {
-  switch ( ui_connie_model ){
-    default:
-    case CONNIE:
-      if ( prog >= 0 && prog < PRESETS_0 ) {
-        // stops
-        for ( int i = 0; i < DRAWBARS_0; i++ ) {
-          ui_draw[i]    = ui_preset_0[prog][i];
-        }
-        ui_set_volumes();
-        ui_value_changed = 1;
+  if ( ui_connie_model == HAMMOND ) {
+    if ( prog >= 0 && prog < PRESETS_1 ) {
+      for ( int i = 0; i < DRAWBARS_1; i++ ) {
+        ui_draw[i] = ui_preset_1[prog][i];
       }
-      break;
-    case HAMMOND:
-      if ( prog >= 0 && prog < PRESETS_1 ) {
-        // stops
-        for ( int i = 0; i < DRAWBARS_1; i++ ) {
-          ui_draw[i]    = ui_preset_1[prog][i];
-        }
-        ui_set_volumes();
-        ui_value_changed = 1;
-      }
-      break;
+      ui_set_volumes();
+      ui_value_changed = 1;
+    }
+  } else if ( prog >= 0 && prog < PRESETS_0 ) {
+    for ( int i = 0; i < DRAWBARS_0; i++ ) {
+      ui_draw[i] = ui_preset_0[prog][i];
+    }
+    ui_set_volumes();
+    ui_value_changed = 1;
   }
   return 0;
 }
@@ -266,7 +286,9 @@ static char kbd_translate_QWERTZ( char c ) {
       return 'Y';
     case 'Y':
       return 'Z';
-   }
+    default:
+      break;
+  }
   return c;
 }
 //
@@ -280,6 +302,8 @@ static char kbd_translate_AZERTY( char c ) {
       return 'Z';
     case 'Z':
       return 'W';
+    default:
+      break;
   }
   return c;
 }
@@ -337,33 +361,33 @@ static void print_status( void ) {
   // drawbar names
   printf( "   |" );
   for ( int i = 0; i < ui_drawbars; i++ ) {
-    printf( "\e[%dm%s\e[0m|", ui_colors[i], ui_ui[i].name );
+    printf( ANSI_ESC "[%dm%s" ANSI_ESC "[0m|", ui_colors[i], ui_ui[i].name );
   }
   printf( "\n" );
   // drawbar up cmd
   printf( "   |" );
   for ( int i = 0; i < ui_drawbars; i++ ) {
-    printf( " \e[%dm[%c]\e[0m |", ui_colors[i], kbd_translate( ui_ui[i].up ) );
+    printf( " " ANSI_ESC "[%dm[%c]" ANSI_ESC "[0m |", ui_colors[i], kbd_translate( ui_ui[i].up ) );
   }
   printf( "\n" );
   // drawbar values
   printf( "   |" );
   for ( int i = 0; i < ui_drawbars; i++ ) {
-    printf( "__\e[%dm%d\e[0m__|", ui_colors[i], ui_draw[i] );
+    printf( "__" ANSI_ESC "[%dm%d" ANSI_ESC "[0m__|", ui_colors[i], ui_draw[i] );
   }
   printf( "\b|\n" );
   // the drawbars
   for ( int line = 0; line < 8; line++ ) {
     printf( "   |" );
     for ( int i = 0; i < ui_drawbars; i++ ) {
-      printf( " \e[%dm%s\e[0m  ", ui_colors[i], ui_draw[i]>line?"###":"   " );
+      printf( " " ANSI_ESC "[%dm%s" ANSI_ESC "[0m  ", ui_colors[i], ui_draw[i]>line?"###":"   " );
     }
     printf( "\b|\n" );
   }
   // drawbar down cmd
   printf( "   |" );
   for ( int i = 0; i < ui_drawbars; i++ ) {
-    printf( "_\e[%dm[%c]\e[0m__", ui_colors[i], kbd_translate( ui_ui[i].dn ) );
+    printf( "_" ANSI_ESC "[%dm[%c]" ANSI_ESC "[0m__", ui_colors[i], kbd_translate( ui_ui[i].dn ) );
   }
   printf( "\b|\n\n" );
   fflush( stdout );
@@ -372,28 +396,35 @@ static void print_status( void ) {
 
 
 // the original terminal io settings (needed by atexit() function)
+#ifndef _WIN32
 static struct termios ui_term_orig;
+#endif
 
 // called via atexit()
 static void ui_shutdown( void )
 {
-  // restore original term settings
+#ifndef _WIN32
   tcsetattr( 1, 0, &ui_term_orig );
+#endif
   printf("\n");
 }
 
 
 // true if char pending, nonblocking
-static int kbhit()
+static int kbhit( void )
 {
+#ifndef _WIN32
   struct timeval tv;
   fd_set fds;
   tv.tv_sec = 0;
   tv.tv_usec = 0;
   FD_ZERO(&fds);
-  FD_SET(STDIN_FILENO, &fds); //STDIN_FILENO is 0
+  FD_SET(STDIN_FILENO, &fds);
   select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
   return FD_ISSET(STDIN_FILENO, &fds);
+#else
+  return 0;
+#endif
 }
 
 
@@ -401,7 +432,6 @@ static int ui_status = 0;
 
 char *session_dir = NULL;
 
-static int ui_connie_model;
 static int ui_kbd;
 
 void ui_save( int type, const char *path ) {
@@ -412,17 +442,17 @@ void ui_save( int type, const char *path ) {
       break;
     case 1:
       puts( "SAVE1" );
-      session_dir = strdup( path );
+      session_dir = ui_strdup( path );
       ui_status = 1;
       break;
     case 2:
       puts( "SAVE2" );
-      session_dir = strdup( path );
+      session_dir = ui_strdup( path );
       ui_status = 2;
       break;
     case 3:
       puts( "SAVE3" );
-      session_dir = strdup( path );
+      session_dir = ui_strdup( path );
       ui_status = 3;
       break;
     default:
@@ -433,26 +463,103 @@ void ui_save( int type, const char *path ) {
 }
 
 
+static void ui_write_session( void )
+{
+  FILE *cfg = open_write_file( ".connie_session" );
+  if ( !cfg )
+    return;
+  fprintf( cfg, "###########################\n" );
+  fprintf( cfg, "### connie session file ###\n" );
+  fprintf( cfg, "###########################\n\n" );
+  if ( uuid )
+    fprintf( cfg, "UUID = \"%s\"\n", uuid );
+  fprintf( cfg, "jack_name = \"%s\"\n", jack_name );
+  fprintf( cfg, "connie_model = %d\n", ui_connie_model );
+  fprintf( cfg, "keybd = %d\n", ui_kbd );
+  fprintf( cfg, "intonation = %d\n", intonation );
+  fprintf( cfg, "concert_pitch = %f\n", concert_pitch );
+  fprintf( cfg, "transpose = %d\n", transpose );
+  fprintf( cfg, "midi_channel = %d\n", tg_midi_channel );
+  fprintf( cfg, "drawbars = { " );
+  for ( int iii = 0; iii < ui_drawbars; iii++ ) {
+    fprintf( cfg, "%d, ", ui_draw[iii] );
+  }
+  fprintf( cfg, "}\n" );
+  fclose( cfg );
+  printf( "ui_status = %d, session_dir = %s\n", ui_status, session_dir );
+}
+
+static void ui_process_status( void )
+{
+  const int should_save = ( ui_status == 1 || ui_status == 2 || ui_status == 3 );
+  if ( ui_status == 1 || ui_status == 3 )
+    ui_status = 0;
+  if ( should_save )
+    ui_write_session();
+}
+
+static void ui_handle_drawbar_key( int cmd )
+{
+  for ( int i = 0; i < ui_drawbars; i++ ) {
+    if ( cmd == ui_ui[i].dn && ui_draw[i] < 8 ) {
+      ui_draw[i]++;
+      ui_value_changed++;
+      return;
+    }
+    if ( cmd == ui_ui[i].up && ui_draw[i] > 0 ) {
+      ui_draw[i]--;
+      ui_value_changed++;
+      return;
+    }
+  }
+}
+
+static void ui_handle_key( int raw_cmd )
+{
+  const int cmd = kbd_translate( (char)toupper( raw_cmd ) );
+  if ( cmd == ' ' ) {
+    tg_panic();
+    ui_value_changed++;
+    return;
+  }
+  if ( cmd == '\033' ) {
+    printf( "QUIT? [y/N] :" );
+    const int answer = getchar();
+    putchar( answer );
+    if ( answer == 'y' || answer == 'Y' )
+      ui_status = 2;
+    else
+      ui_value_changed++;
+    return;
+  }
+  if ( isdigit( cmd ) ) {
+    ui_set_program( cmd - '0' );
+    return;
+  }
+  if ( isalpha( cmd ) )
+    ui_handle_drawbar_key( cmd );
+}
+
 
 // simple "gui" control
 // ********************
 //
-void ui_init( const int connie_model, const keybd_t kbd ) {
+void ui_init( const int model, const keybd_t kbd ) {
 
+#ifndef _WIN32
   struct termios t;
-  // get term status
-  tcgetattr (1, &t);
-  ui_term_orig = t; // store status in global var
-  // set keyboard to non canonical mode
+  tcgetattr( 1, &t );
+  ui_term_orig = t;
   t.c_lflag &= ~(ICANON | ECHO);
-  tcsetattr (1, 0, &t);
-  atexit( ui_shutdown ); // tidy up
+  tcsetattr( 1, 0, &t );
+#endif
+  atexit( ui_shutdown );
 
-  ui_connie_model = connie_model;
+  ui_connie_model = model;
   ui_kbd = kbd;
 
-  ui_set_kbd( kbd ); // QWERTY, QWERTZ or AZERTY
-  ui_set_model( connie_model ); // 
+  ui_set_kbd( kbd );
+  ui_set_model( (model_t)model );
   ui_set_program( 0 );
 }
 
@@ -460,82 +567,18 @@ void ui_init( const int connie_model, const keybd_t kbd ) {
 
 void ui_loop( const char *name ) {
 
-  int cmd;
-
   while ( 2 != ui_status ) {
-    if ( kbhit() ) {
-      cmd = kbd_translate( toupper( getchar() ) );
-      if ( ' ' == cmd ) { // SPACE -> panic
-        tg_panic();
-        ui_value_changed++;
-      } else if ( '\033' == cmd ) { // ESC -> QUIT
-        printf( "QUIT? [y/N] :" );
-        cmd = getchar();
-        putchar( cmd );
-        if ( 'y' == cmd || 'Y' == cmd )
-          ui_status = 2;
-        else
-          ui_value_changed++; // force redraw
-      } else if ( isdigit( cmd ) ) { // number -> set prog
-        ui_set_program( cmd - '0' );
-        //ui_value_changed++;
-      } else if ( isalpha( cmd ) ){ // alpha -> search drawbar cmd
-        for ( int i = 0; i < ui_drawbars; i++ ) {
-          if ( cmd == ui_ui[i].dn ) {
-            if ( ui_draw[i] < 8 ) {
-              ui_draw[i]++;
-              ui_value_changed++;
-              break;
-            } 
-          } else if ( cmd == ui_ui[i].up ) {
-            if ( ui_draw[i] > 0 ) {
-              ui_draw[i]--;
-              ui_value_changed++;
-              break;
-            } 
-          }
-        }
-      }
-    } 
+    if ( kbhit() )
+      ui_handle_key( getchar() );
     if ( ui_value_changed ) {
       ui_set_volumes();
       print_help( name );
       print_status();
       ui_value_changed = 0;
     } else {
-      usleep( 10000 );
+      ui_sleep_ms( 10 );
     }
-    switch ( ui_status ) {
-      default:
-      case 1:
-      case 3:
-        ui_status = 0;
-      case 2:
-        {
-          FILE *cfg = fopen( ".connie_session", "w" );
-          fprintf( cfg, "###########################\n" );
-          fprintf( cfg, "### connie session file ###\n" );
-          fprintf( cfg, "###########################\n\n" );
-          if ( uuid )
-            fprintf( cfg, "UUID = \"%s\"\n", uuid );
-          fprintf( cfg, "jack_name = \"%s\"\n", jack_name );
-          fprintf( cfg, "connie_model = %d\n", ui_connie_model );
-          fprintf( cfg, "keybd = %d\n", ui_kbd );
-          fprintf( cfg, "intonation = %d\n", intonation );
-          fprintf( cfg, "concert_pitch = %f\n", concert_pitch );
-          fprintf( cfg, "transpose = %d\n", transpose );
-          fprintf( cfg, "midi_channel = %d\n", tg_midi_channel );
-          fprintf( cfg, "drawbars = { " );
-          for ( int iii=0; iii < ui_drawbars; iii++ ) {
-            fprintf( cfg, "%d, ", ui_draw[iii] );
-          }
-          fprintf( cfg, "}\n" );
-          fclose( cfg );
-          printf( "ui_status = %d, session_dir = %s\n", ui_status, session_dir );
-        }
-      case 0:
-        break;
-    }
-  } //while 2 != ui_status
-} // connie_ui()
+    ui_process_status();
+  }
+}
 

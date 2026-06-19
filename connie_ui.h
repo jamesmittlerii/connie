@@ -24,14 +24,12 @@
 #ifndef CONNIE_UI_H
 #define CONNIE_UI_H
 
-//extern int ui_value_changed;
-
 typedef enum keybd_enum { QWERTY=0, QWERTZ, AZERTY } keybd_t;
 
 extern int ui_set_program( int prog );
 extern int ui_set_drawbars( const int *draw );
 extern void ui_save( int type, const char *path );
-extern void ui_init( const int connie_model, const keybd_t keybd );
+extern void ui_init( const int model, const keybd_t keybd );
 extern void ui_loop( const char *name );
 
 #endif
