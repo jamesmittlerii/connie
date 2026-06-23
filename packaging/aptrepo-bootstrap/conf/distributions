@@ -1,7 +1,7 @@
-Origin: James Mittler LV2
-Label: James Mittler LV2
+Origin: James Mittler
+Label: James Mittler
 Suite: stable
 Codename: bookworm
 Architectures: amd64 arm64
 Components: main
-Description: LV2 plugins
+Description: Debian packages
